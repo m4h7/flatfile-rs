@@ -201,6 +201,7 @@ impl Metadata {
 
     pub fn write<W: Write>(&self, writer: &mut W, names: &[&str], values: &[ColumnValue]) {
 
+        // ordered[colidx] = valueindex|nameindex
         let mut ordered: Vec<usize> = vec![0; self.columns.len()];
 
         for (i, name) in names.iter().enumerate() {
@@ -251,12 +252,13 @@ impl Metadata {
 
         let mut header_bits = 0;
 
-        for i in &ordered {
-            let val = &values[*i];
+        for colidx in 0..self.columns.len() {
+            let validx = ordered[colidx];
+            let val = &values[validx];
             match val {
                 &ColumnValue::null => {}
                 _ => {
-                    header_bits = header_bits | (1 << i);
+                    header_bits = header_bits | (1 << colidx);
                 }
             }
         }
@@ -299,11 +301,11 @@ impl Metadata {
 
         let mut compressed: Vec<Option<Vec<u8>>> = vec![None; ordered.len()];
 
-        for (index, i) in ordered.iter().enumerate() {
-            let val = &values[*i];
+        for (colidx, validx) in ordered.iter().enumerate() {
+            let val = &values[*validx];
             match val {
                 &ColumnValue::string { ref v } => {
-                    let col = &self.columns[index];
+                    let col = &self.columns[colidx];
                     match col.compression {
                         CompressionType::brotli => {
                             panic!("brotli compression not supported yet");
@@ -323,7 +325,7 @@ impl Metadata {
                             let b = v.as_bytes();
                             let wr = fo.write(&b);
                             let (w, res) = fo.finish();
-                            compressed[*i] = Some(w);
+                            compressed[colidx] = Some(w);
                         }
                         CompressionType::zlib => {
                             panic!("zlib compression not supported yet");
@@ -335,8 +337,9 @@ impl Metadata {
             }
         }
 
-        for i in &ordered {
-            let val = &values[*i];
+        for colidx in 0..self.columns.len() {
+            let validx = ordered[colidx];
+            let val = &values[validx];
             match val {
                 &ColumnValue::u32le { v } => {
                     let mut buf = [0; 4];
@@ -362,7 +365,7 @@ impl Metadata {
                 }
                 &ColumnValue::string { ref v } => {
                     let mut buf = [0; 4];
-                    let len = match compressed[*i] {
+                    let len = match compressed[colidx] {
                         Some(ref vec) => vec.len(),
                         None => v.as_bytes().len(),
                     };
@@ -377,11 +380,12 @@ impl Metadata {
             }
         }
 
-        for i in ordered {
-            let val = &values[i];
+        for colidx in 0..self.columns.len() {
+            let validx = ordered[colidx];
+            let val = &values[validx];
             match val {
                 &ColumnValue::string { ref v } => {
-                    match compressed[i] {
+                    match compressed[colidx] {
                         Some(ref cv) => {
                             writer.write(&cv);
                             adler.update_buffer(&cv);
