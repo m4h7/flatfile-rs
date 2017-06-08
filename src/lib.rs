@@ -297,6 +297,44 @@ impl Metadata {
             }
         }
 
+        let mut compressed: Vec<Option<Vec<u8>>> = vec![None; ordered.len()];
+
+        for (index, i) in ordered.iter().enumerate() {
+            let val = &values[*i];
+            match val {
+                &ColumnValue::string { ref v } => {
+                    let col = &self.columns[index];
+                    match col.compression {
+                        CompressionType::brotli => {
+                            panic!("brotli compression not supported yet");
+                        }
+                        CompressionType::lz4 => {
+                            let buf = Vec::new();
+                            let mut fo = lz4::EncoderBuilder::new()
+                                .checksum(lz4::ContentChecksum::NoChecksum)
+//                                .checksum(lz4::ContentChecksum::ChecksumEnabled)
+//                                .block_size(lz4::BlockSize::Max64KB)
+                                .block_size(lz4::BlockSize::Default)
+                                .block_mode(lz4::BlockMode::Linked)
+//                                .block_mode(lz4::BlockMode::Independent)
+                                .level(16)
+                                .build(buf)
+                                .unwrap();
+                            let b = v.as_bytes();
+                            let wr = fo.write(&b);
+                            let (w, res) = fo.finish();
+                            compressed[*i] = Some(w);
+                        }
+                        CompressionType::zlib => {
+                            panic!("zlib compression not supported yet");
+                        }
+                        CompressionType::none => {}
+                    }
+                }
+                _ => {}
+            }
+        }
+
         for i in &ordered {
             let val = &values[*i];
             match val {
@@ -324,7 +362,10 @@ impl Metadata {
                 }
                 &ColumnValue::string { ref v } => {
                     let mut buf = [0; 4];
-                    let len = v.as_bytes().len();
+                    let len = match compressed[*i] {
+                        Some(ref vec) => vec.len(),
+                        None => v.as_bytes().len(),
+                    };
                     buf[0] = len as u8;
                     buf[1] = ((len >> 8) & 0xff) as u8;
                     buf[2] = (len >> 16) as u8;
@@ -336,17 +377,17 @@ impl Metadata {
             }
         }
 
-        for i in &ordered {
-            let val = &values[*i];
+        for i in ordered {
+            let val = &values[i];
             match val {
                 &ColumnValue::string { ref v } => {
-                    let col = &self.columns[*i];
-                    match col.compression {
-                        CompressionType::brotli => {}
-                        CompressionType::lz4 => {}
-                        CompressionType::zlib => {}
-                        CompressionType::none => {
-                            let b = v.as_bytes();
+                    match compressed[i] {
+                        Some(ref cv) => {
+                            writer.write(&cv);
+                            adler.update_buffer(&cv);
+                        }
+                        None => {
+                            let b = &v.as_bytes();
                             writer.write(b);
                             adler.update_buffer(b);
                         }
@@ -543,7 +584,7 @@ mod tests {
     #[test]
     fn write_works() {
         let mut f = File::create("/tmp/_testfile_w.dat").unwrap();
-        let md_string = "checksum adler32\ncolumn a string\ncolumn b string\ncolumn c \
+        let md_string = "checksum adler32\ncolumn a string _ lz4\ncolumn b string\ncolumn c \
                          u32le\ncolumn d u64le\n";
         let md = Metadata::parse_string(md_string).unwrap();
         let values = [ColumnValue::string { v: "hello_world".to_string() },
