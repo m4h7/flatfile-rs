@@ -202,44 +202,45 @@ impl Metadata {
     pub fn write<W: Write>(&self, writer: &mut W, names: &[&str], values: &[ColumnValue]) {
 
         // ordered[colidx] = valueindex|nameindex
-        let mut ordered: Vec<usize> = vec![0; self.columns.len()];
+        let oob = self.columns.len() + 1;
+        let mut ordered: Vec<usize> = vec![oob; self.columns.len()];
 
-        for (i, name) in names.iter().enumerate() {
-            let index = self.getindex(name);
-            ordered[index] = i;
+        for (colidx, name) in names.iter().enumerate() {
+            let validx = self.getindex(name);
+            ordered[colidx] = validx;
 
-            match self.columns[index].ctype {
+            match self.columns[colidx].ctype {
                 ColumnType::string => {
-                    match values[i] {
+                    match values[validx] {
                         ColumnValue::string { .. } => {}
                         ColumnValue::u32le { .. } => {
-                            panic!("Column {} expected string received u32le", names[i]);
+                            panic!("Column {} expected string received u32le", names[validx]);
                         }
                         ColumnValue::u64le { .. } => {
-                            panic!("Column {} expected string received u64le", names[i]);
+                            panic!("Column {} expected string received u64le", names[validx]);
                         }
                         ColumnValue::null => {}
                     }
                 }
                 ColumnType::u32le => {
-                    match values[i] {
+                    match values[validx] {
                         ColumnValue::string { .. } => {
-                            panic!("Column {} expected u32le received string", names[i]);
+                            panic!("Column {} expected u32le received string", names[validx]);
                         }
                         ColumnValue::u64le { .. } => {
-                            panic!("Column {} expected u32le received u64le", names[i]);
+                            panic!("Column {} expected u32le received u64le", names[validx]);
                         }
                         ColumnValue::u32le { .. } => {}
                         ColumnValue::null => {}
                     }
                 }
                 ColumnType::u64le => {
-                    match values[i] {
+                    match values[validx] {
                         ColumnValue::string { .. } => {
-                            panic!("Column {} expected u64le received string", names[i]);
+                            panic!("Column {} expected u64le received string", names[validx]);
                         }
                         ColumnValue::u32le { .. } => {
-                            panic!("Column {} expected u63le received u32le", names[i]);
+                            panic!("Column {} expected u63le received u32le", names[validx]);
                         }
                         ColumnValue::u64le { .. } => {}
                         ColumnValue::null => {}
@@ -301,8 +302,9 @@ impl Metadata {
 
         let mut compressed: Vec<Option<Vec<u8>>> = vec![None; ordered.len()];
 
-        for (colidx, validx) in ordered.iter().enumerate() {
-            let val = &values[*validx];
+        for colidx in 0..self.columns.len() {
+            let validx = ordered[colidx];
+            let val = &values[validx];
             match val {
                 &ColumnValue::string { ref v } => {
                     let col = &self.columns[colidx];
@@ -319,7 +321,7 @@ impl Metadata {
                                 .block_size(lz4::BlockSize::Default)
                                 .block_mode(lz4::BlockMode::Linked)
 //                                .block_mode(lz4::BlockMode::Independent)
-                                .level(16)
+//                                .level(16)
                                 .build(buf)
                                 .unwrap();
                             let b = v.as_bytes();
@@ -449,8 +451,8 @@ impl Metadata {
             .len()); // count only strings?
         let mut result = Row::new(&self.columns);
 
-        for (i, c) in self.columns.iter().enumerate() {
-            if header_bits & (1 << i) != 0 {
+        for (colidx, c) in self.columns.iter().enumerate() {
+            if header_bits & (1 << colidx) != 0 {
                 // column is present
                 match c.ctype {
                     ColumnType::u32le => {
@@ -460,7 +462,7 @@ impl Metadata {
                         let v = (buf[0] as usize) | (buf[1] as usize) << 8 |
                                 (buf[2] as usize) << 16 |
                                 (buf[3] as usize) << 24;
-                        result.push(i, ColumnValue::u32le { v: v as u32 });
+                        result.push(colidx, ColumnValue::u32le { v: v as u32 });
                     }
                     ColumnType::u64le => {
                         let mut buf = [0; 8];
@@ -473,7 +475,7 @@ impl Metadata {
                                 (buf[5] as usize) << 40 |
                                 (buf[6] as usize) << 48 |
                                 (buf[7] as usize) << 56;
-                        result.push(i, ColumnValue::u64le { v: v as u64 });
+                        result.push(colidx, ColumnValue::u64le { v: v as u64 });
                     }
                     ColumnType::string => {
                         let mut buf = [0; 4];
@@ -482,7 +484,7 @@ impl Metadata {
                         let size = (buf[0] as usize) | (buf[1] as usize) << 8 |
                                    (buf[2] as usize) << 16 |
                                    (buf[3] as usize) << 24;
-                        blobs.push((i, size, c.compression));
+                        blobs.push((colidx, size, c.compression));
                     }
                     _ => {
                         println!("unknown column type");
@@ -491,8 +493,7 @@ impl Metadata {
             }
         }
 
-
-        for &(i, size, ref compression) in blobs.iter() {
+        for &(colidx, size, ref compression) in blobs.iter() {
             let mut buf: Vec<u8> = vec![0; size]; // Vec::with_capacity(size);
             reader.read(&mut buf);
             adler.update_buffer(&buf);
@@ -525,7 +526,7 @@ impl Metadata {
                     s.to_string()
                 }
             };
-            result.push(i, ColumnValue::string { v: s });
+            result.push(colidx, ColumnValue::string { v: s });
         }
 
         match self.checksum {
@@ -591,8 +592,8 @@ mod tests {
         let md_string = "checksum adler32\ncolumn a string _ lz4\ncolumn b string\ncolumn c \
                          u32le\ncolumn d u64le\n";
         let md = Metadata::parse_string(md_string).unwrap();
-        let values = [ColumnValue::string { v: "hello_world".to_string() },
-                      ColumnValue::string { v: "something".to_string() },
+        let values = [ColumnValue::string { v: "not_compressed".to_string() },
+                      ColumnValue::string { v: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string() },
                       ColumnValue::u64le { v: 987 },
                       ColumnValue::u32le { v: 123 }];
         let names = ["b", "a", "d", "c"];
