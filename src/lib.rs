@@ -71,7 +71,7 @@ impl<'a> Row<'a> {
         self.values[colidx] = v;
     }
 
-    fn geti(&self, colidx: usize) -> &ColumnValue {
+    pub fn geti(&self, colidx: usize) -> &ColumnValue {
         if colidx < self.values.len() {
             &self.values[colidx]
         } else {
