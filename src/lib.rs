@@ -1,3 +1,3 @@
-mod types;
-mod v1;
-mod v2;
+pub mod types;
+pub mod v1;
+pub mod v2;
