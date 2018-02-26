@@ -1,6 +1,6 @@
-mod row;
+pub mod row;
 mod tests;
 mod read;
 mod write;
 mod parse;
-mod schema;
+pub mod schema;
