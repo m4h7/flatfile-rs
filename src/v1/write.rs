@@ -154,6 +154,10 @@ pub fn schema_write<W: Write>(
                             let wr = fo.write(&b);
                             wr.expect("write wr");
                             let (w, res) = fo.finish();
+                            res.expect("compression finish");
+                            if b.len() > 0 {
+                                assert!(w.len() != 0);
+                            }
                             compressed[colidx] = Some(w);
                         }
                         CompressionType::Zlib => {
@@ -220,13 +224,17 @@ pub fn schema_write<W: Write>(
                     match compressed[colidx] {
                         Some(ref cv) => {
                             let r = writer.write(&cv);
-                            r.expect("write co s");
+                            if r.unwrap() != cv.len() {
+                                panic!("write failed (compressed/string)");
+                            }
                             adler.update_buffer(&cv);
                         }
                         None => {
                             let b = &v.as_bytes();
                             let r = writer.write(b);
-                            r.expect("write none");
+                            if r.unwrap() != b.len() {
+                                panic!("write failed (uncompressed/string)");
+                            }
                             adler.update_buffer(b);
                         }
                     }
