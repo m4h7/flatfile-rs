@@ -7,3 +7,4 @@ authors = ["mhg <mhg@urml.eu>"]
 lz4 = "*"
 brotli2 = "*"
 adler32 = "*"
+memmap = "*"

@@ -1,17 +1,14 @@
 use types::{ColumnType, ColumnValue};
 use std::str;
+use std::io::{Read, Write};
 use std::cmp::{min};
 use v2::schema2::Schema2;
+use v2::buf::Buf;
+
+extern crate lz4;
 
 extern crate adler32;
 use self::adler32::RollingAdler32;
-
-pub trait Buf {
-    fn seek(&mut self, pos: usize) -> usize;
-    fn readb(&mut self) -> u8;
-    fn writeb(&mut self, u: u8);
-    fn is_overflow(&self) -> bool;
-}
 
 pub struct Vecbuf {
     buf: Vec<u8>,
@@ -108,23 +105,64 @@ fn write_varint<B: Buf>(b: &mut B, v: usize) {
 }
 
 fn read_varstring<B: Buf>(b: &mut B) -> String {
-    let size = read_varint(b);
-    let mut bytes = Vec::new();
-    for i in 0..size {
-        let byte = read_db(b);
-        bytes.push(byte);
+    let co = read_db(b);
+    if co == 0 as u8 {
+        let size = read_varint(b);
+        let mut bytes = Vec::new();
+        for i in 0..size {
+            let byte = read_db(b);
+            bytes.push(byte);
+        }
+        // convert bytes to string
+        let s = str::from_utf8(bytes.as_slice()).unwrap();
+        s.to_string() // TBD
+    } else if co == 'L' as u8 {
+        let size = read_varint(b);
+        let mut bytes = Vec::new();
+        for i in 0..size {
+            let byte = read_db(b);
+            bytes.push(byte);
+        }
+        let mut d = lz4::Decoder::new(bytes.as_slice()).unwrap();
+        let mut dbuf: Vec<u8> = Vec::new();
+        let r = d.read_to_end(&mut dbuf);
+        r.unwrap();
+        d.finish();
+        let s = str::from_utf8(&dbuf).unwrap();
+        s.to_string()
+    } else {
+        panic!("unknown compression type {}", co);
     }
-    // convert bytes to string
-    let s = str::from_utf8(bytes.as_slice()).unwrap();
-    s.to_string() // TBD
 }
 
 // write variable sized string
 fn write_varstring<B: Buf>(b: &mut B, s: &str) {
-    write_varint(b, s.len());
-    for c in s.as_bytes() {
-        write_db(b, *c);
-     }
+    // try compressing
+    let buf = Vec::new();
+    let mut co = lz4::EncoderBuilder::new()
+        .checksum(lz4::ContentChecksum::NoChecksum)
+        .block_size(lz4::BlockSize::Default)
+        .block_mode(lz4::BlockMode::Linked)
+        .build(buf)
+        .unwrap();
+    let wres = co.write(s.as_bytes());
+    wres.expect("co.write");
+    let (outbuf, fres) = co.finish();
+    fres.expect("co.finish");
+
+    if outbuf.len() < s.as_bytes().len() {
+        write_db(b, 'L' as u8); // lz4 mark
+        write_varint(b, outbuf.len());
+        for c in outbuf.as_slice() {
+            write_db(b, *c);
+        }
+    } else {
+        write_db(b, 0 as u8); // no compression
+        write_varint(b, s.len());
+        for c in s.as_bytes() {
+            write_db(b, *c);
+        }
+    }
 }
 
 fn write_db<B: Buf>(b: &mut B, v: u8) {
@@ -320,8 +358,11 @@ pub fn schema_read_row<B: Buf>(
     let aligned_len = schema.len() + (8 - (schema.len() % 8));
     for i in 0..(aligned_len/8) {
         let hash = {
+            // start checksum
             let mut adlerbuf = BufAdler32::<B>::new(&mut buf);
+            // read null byte giving the null state of next 8 values
             let b = read_db(&mut adlerbuf);
+            // number of column remaining (0..8)
             let jmax = min(8, schema.len() - i * 8);
 
             for j in 0..jmax {
@@ -524,15 +565,25 @@ fn test_schema_write() {
         sch.add("third",
               ColumnType::String,
               false);
+        sch.add("fourth",
+              ColumnType::String,
+              false);
+        sch.add("fifth",
+              ColumnType::String,
+              true);
 
         let cv1 = ColumnValue::U32 { v: 0x12345678 };
         let cv2 = ColumnValue::U64 { v: 0x22334455 };
         let cv3 = ColumnValue::String { v: "a_string".to_string() };
+        let cv4 = ColumnValue::String { v: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string() };
+        let cv5 = ColumnValue::Null;
         let mut vbuf = Vecbuf::new(1024);
         let mut vec = Vec::new();
         vec.push(cv1);
         vec.push(cv2);
         vec.push(cv3);
+        vec.push(cv4);
+        vec.push(cv5);
         let wr = schema_write(&mut vbuf, vec.as_slice(), &sch);
         assert!(wr == true);
 
@@ -542,11 +593,15 @@ fn test_schema_write() {
         rvec.push(ColumnValue::Null);
         rvec.push(ColumnValue::Null);
         rvec.push(ColumnValue::Null);
+        rvec.push(ColumnValue::Null);
+        rvec.push(ColumnValue::Null);
         let rr = schema_read_row(&mut vbuf, rvec.as_mut_slice(), &sch);
         assert!(rr == true);
 
         assert!(vec[0] == rvec[0]);
         assert!(vec[1] == rvec[1]);
         assert!(vec[2] == rvec[2]);
+        assert!(vec[3] == rvec[3]);
+        assert!(vec[4] == rvec[4]);
     }
 }
