@@ -13,7 +13,7 @@ pub struct MmapBuf {
 }
 
 impl MmapBuf {
-    fn new(f: File) -> MmapBuf {
+    pub fn new(f: File) -> MmapBuf {
         let mmap = unsafe { Mmap::map(&f) };
         MmapBuf {
             m: mmap.unwrap(),
