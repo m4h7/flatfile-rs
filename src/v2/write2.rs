@@ -234,7 +234,7 @@ fn read_dq_le<B: Buf>(b: &mut B) -> u64 {
     (b7 as u64) << 56
 }
 
-fn read_schema_v2<B: Buf>(
+pub fn read_schema_v2<B: Buf>(
   buf: &mut B,
   ) -> Option<Schema2> {
     let version = read_db(buf);
