@@ -261,7 +261,7 @@ pub fn read_schema_v2<B: Buf>(
     None
 }
 
-fn write_schema_v2<B: Buf>(
+pub fn write_schema_v2<B: Buf>(
   buf: &mut B,
   schema: &Schema2,
   ) {
