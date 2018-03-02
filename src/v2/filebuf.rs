@@ -23,6 +23,18 @@ impl FileBuf {
             overflow: false,
         }
     }
+
+    fn flush(&mut self) {
+        let res = self.f.write(self.buf.as_slice());
+        self.fpos += res.unwrap();
+    }
+}
+
+impl Drop for FileBuf {
+    fn drop(&mut self) {
+        println!("drop!");
+        self.flush();
+    }
 }
 
 impl Buf for FileBuf {
@@ -49,8 +61,7 @@ impl Buf for FileBuf {
     #[inline]
     fn writeb(&mut self, b: u8) {
         if self.bpos >= self.buf.len() {
-            let res = self.f.write(self.buf.as_slice());
-            self.fpos += res.unwrap();
+            self.flush();
             self.bpos = 0;
         } else {
             self.buf[self.bpos] = b;
