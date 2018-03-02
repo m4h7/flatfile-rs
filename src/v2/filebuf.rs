@@ -25,7 +25,7 @@ impl FileBuf {
     }
 
     fn flush(&mut self) {
-        let res = self.f.write(self.buf.as_slice());
+        let res = self.f.write(&self.buf.as_slice()[0..self.bpos]);
         self.fpos += res.unwrap();
     }
 }
