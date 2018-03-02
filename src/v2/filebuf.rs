@@ -11,7 +11,7 @@ pub struct FileBuf {
 }
 
 impl FileBuf {
-    fn new(f: File, bufsize: usize) -> FileBuf {
+    pub fn new(f: File, bufsize: usize) -> FileBuf {
         let mut vec = Vec::with_capacity(bufsize);
         vec.resize(bufsize, 0);
 
