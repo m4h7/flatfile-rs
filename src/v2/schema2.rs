@@ -1,5 +1,6 @@
 use types::{ColumnType};
 
+#[derive(Clone)]
 pub struct Schema2 {
     pub names: Vec<String>,
     pub types: Vec<ColumnType>,
