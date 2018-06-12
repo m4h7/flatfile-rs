@@ -1,15 +1,13 @@
-use v2::buf::Buf;
+use v2::buf::{ReadBuf};
 
 extern crate memmap;
-use self::memmap::{MmapOptions, Mmap};
-use std::io::Write;
+use self::memmap::{Mmap};
 use std::fs::File;
 
 pub struct MmapBuf {
     f: File,
     m: Mmap,
     pos: usize,
-    overflow: bool,
 }
 
 impl MmapBuf {
@@ -19,16 +17,22 @@ impl MmapBuf {
             m: mmap.unwrap(),
             f: f,
             pos: 0,
-            overflow: false,
         }
     }
 }
 
-impl Buf for MmapBuf {
+impl ReadBuf for MmapBuf {
+    #[inline]
+    fn past_eof(&mut self) -> bool {
+        self.pos >= self.m.len()
+    }
+
+    #[inline]
     fn seek(&mut self, pos: usize) -> usize {
-        self.pos = pos;
-        if self.pos > self.m.len() {
-            self.overflow = true;
+        if pos >= self.m.len() {
+            self.pos = self.m.len();
+        } else {
+            self.pos = pos;
         }
         self.pos
     }
@@ -36,21 +40,11 @@ impl Buf for MmapBuf {
     #[inline]
     fn readb(&mut self) -> u8 {
         if self.pos >= self.m.len() {
-            self.overflow = true;
             0 as u8
         } else {
             let u = self.m[self.pos];
             self.pos += 1;
             u
         }
-    }
-
-    #[inline]
-    fn writeb(&mut self, u: u8) {
-        self.overflow = true;
-    }
-
-    fn is_overflow(&self) -> bool {
-        self.overflow
     }
 }

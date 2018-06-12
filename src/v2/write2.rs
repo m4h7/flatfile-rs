@@ -3,77 +3,12 @@ use std::str;
 use std::io::{Read, Write};
 use std::cmp::{min};
 use v2::schema2::Schema2;
-use v2::buf::Buf;
+use v2::buf::{ReadBuf, AppendBuf};
+use v2::adlerbuf::{ReadBufAdler32, AppendBufAdler32};
 
 extern crate lz4;
 
-extern crate adler32;
-use self::adler32::RollingAdler32;
-
-pub struct Vecbuf {
-    buf: Vec<u8>,
-    pos: usize,
-    overflow: bool,
-}
-
-impl Vecbuf {
-    fn new(size: usize) -> Vecbuf {
-        let mut vec = Vec::with_capacity(size);
-        vec.resize(size, 0);
-
-        Vecbuf {
-            buf: vec,
-            pos: 0,
-            overflow: false,
-        }
-    }
-
-    fn len(&self) -> usize {
-        self.buf.len()
-    }
-
-    fn set_overflow(&mut self) {
-        self.overflow = true;
-    }
-}
-
-impl Buf for Vecbuf {
-    #[inline]
-    fn seek(&mut self, pos: usize) -> usize {
-        if self.pos <= self.len() {
-            self.pos = pos;
-        }
-        self.overflow = self.pos >= self.len();
-        self.pos
-    }
-
-    #[inline]
-    fn readb(&mut self) -> u8 {
-        if self.pos < self.len() {
-            let r = self.buf[self.pos];
-            self.pos += 1;
-            r
-        } else {
-            0 as u8
-        }
-    }
-
-    #[inline]
-    fn writeb(&mut self, b: u8) {
-        if self.pos >= self.len() {
-            self.overflow = true;
-        } else {
-            self.buf[self.pos] = b;
-            self.pos += 1;
-        }
-    }
-
-    fn is_overflow(&self) -> bool {
-        self.overflow
-    }
-}
-
-fn read_varint<B: Buf>(b: &mut B) -> usize {
+fn read_varint<B: ReadBuf>(b: &mut B) -> usize {
     let mut bits: usize = 0;
     let mut r : usize = 0;
     loop {
@@ -89,7 +24,7 @@ fn read_varint<B: Buf>(b: &mut B) -> usize {
 }
 
 // writes at least a byte
-fn write_varint<B: Buf>(b: &mut B, v: usize) {
+fn write_varint<B: AppendBuf>(b: &mut B, v: usize) {
     let mut r = v;
     loop {
         let mut x7 = (r & 0x7f) as u8;
@@ -104,7 +39,7 @@ fn write_varint<B: Buf>(b: &mut B, v: usize) {
     }
 }
 
-fn read_varstring<B: Buf>(b: &mut B) -> String {
+fn read_varstring<B: ReadBuf>(b: &mut B) -> Option<String> {
     let co = read_db(b);
     if co == 0 as u8 {
         let size = read_varint(b);
@@ -115,9 +50,12 @@ fn read_varstring<B: Buf>(b: &mut B) -> String {
         }
         // convert bytes to string
         let s = str::from_utf8(bytes.as_slice()).unwrap();
-        s.to_string() // TBD
+        Some(s.to_string()) // TBD
     } else if co == 'L' as u8 {
         let size = read_varint(b);
+//        if !check(b, size) {
+//            return None;
+//        }
         let mut bytes = Vec::new();
         for i in 0..size {
             let byte = read_db(b);
@@ -129,14 +67,14 @@ fn read_varstring<B: Buf>(b: &mut B) -> String {
         r.unwrap();
         d.finish();
         let s = str::from_utf8(&dbuf).unwrap();
-        s.to_string()
+        Some(s.to_string())
     } else {
         panic!("unknown compression type {}", co);
     }
 }
 
 // write variable sized string
-fn write_varstring<B: Buf>(b: &mut B, s: &str) {
+fn write_varstring<B: AppendBuf>(b: &mut B, s: &str) {
     // try compressing
     let buf = Vec::new();
     let mut co = lz4::EncoderBuilder::new()
@@ -165,25 +103,29 @@ fn write_varstring<B: Buf>(b: &mut B, s: &str) {
     }
 }
 
-fn write_db<B: Buf>(b: &mut B, v: u8) {
+fn flush_buf<B: AppendBuf>(b: &mut B) {
+    b.flush();
+}
+
+fn write_db<B: AppendBuf>(b: &mut B, v: u8) {
     b.writeb(v);
 }
 
-fn write_dw_le<B: Buf>(b: &mut B, v: u16) {
+fn write_dw_le<B: AppendBuf>(b: &mut B, v: u16) {
     let b0 = (v & 0xff) as u8;
     let b1 = (v >> 8) as u8;
     b.writeb(b0);
     b.writeb(b1);
 }
 
-fn write_dd_le<B: Buf>(b: &mut B, v: u32) {
+fn write_dd_le<B: AppendBuf>(b: &mut B, v: u32) {
     b.writeb((v & 0xff) as u8);
     b.writeb((v >> 8) as u8);
     b.writeb((v >> 16) as u8);
     b.writeb((v >> 24) as u8);
 }
 
-fn write_dq_le<B: Buf>(b: &mut B, v: u64) {
+fn write_dq_le<B: AppendBuf>(b: &mut B, v: u64) {
     b.writeb(v as u8);
     b.writeb((v >> 8) as u8);
     b.writeb((v >> 16) as u8);
@@ -194,17 +136,21 @@ fn write_dq_le<B: Buf>(b: &mut B, v: u64) {
     b.writeb((v >> 56) as u8);
 }
 
-fn read_db<B: Buf>(b: &mut B) -> u8 {
+//fn check<B: Buf>(b: &B, len: usize) -> bool {
+//    b.check(len)
+//}
+
+fn read_db<B: ReadBuf>(b: &mut B) -> u8 {
     b.readb()
 }
 
-fn read_dw_le<B: Buf>(b: &mut B) -> u16 {
+fn read_dw_le<B: ReadBuf>(b: &mut B) -> u16 {
     let b0 = b.readb();
     let b1 = b.readb();
     (b0 as u16) | ((b1 as u16) << 8)
 }
 
-fn read_dd_le<B: Buf>(b: &mut B) -> u32 {
+fn read_dd_le<B: ReadBuf>(b: &mut B) -> u32 {
     let b0 = b.readb();
     let b1 = b.readb();
     let b2 = b.readb();
@@ -215,7 +161,7 @@ fn read_dd_le<B: Buf>(b: &mut B) -> u32 {
     (b3 as u32) << 24
 }
 
-fn read_dq_le<B: Buf>(b: &mut B) -> u64 {
+fn read_dq_le<B: ReadBuf>(b: &mut B) -> u64 {
     let b0 = b.readb();
     let b1 = b.readb();
     let b2 = b.readb();
@@ -234,7 +180,7 @@ fn read_dq_le<B: Buf>(b: &mut B) -> u64 {
     (b7 as u64) << 56
 }
 
-pub fn read_schema_v2<B: Buf>(
+pub fn read_schema_v2<B: ReadBuf>(
   buf: &mut B,
   ) -> Option<Schema2> {
     let version = read_db(buf);
@@ -242,7 +188,11 @@ pub fn read_schema_v2<B: Buf>(
         let mut schema = Schema2::new();
         let num_columns = read_varint(buf);
         for i in 0..num_columns {
-            let s = read_varstring(buf);
+            let vs = read_varstring(buf);
+            let s = match vs {
+                Some(x) => x,
+                None => return None
+            };
             let ct = read_db(buf);
             let n = read_db(buf);
             let ctype = match ct {
@@ -261,7 +211,7 @@ pub fn read_schema_v2<B: Buf>(
     None
 }
 
-pub fn write_schema_v2<B: Buf>(
+pub fn write_schema_v2<B: AppendBuf>(
   buf: &mut B,
   schema: &Schema2,
   ) {
@@ -286,42 +236,8 @@ pub fn write_schema_v2<B: Buf>(
     }
 }
 
-struct BufAdler32<'a, T: 'a + Buf> {
-    adler32: RollingAdler32,
-    target: &'a mut T,
-}
 
-impl<'a, T: Buf> Buf for BufAdler32<'a, T> {
-    fn seek(&mut self, pos: usize) -> usize {
-        self.target.seek(pos)
-    }
-    fn readb(&mut self) -> u8 {
-        let b = self.target.readb();
-        self.adler32.update(b);
-        b
-    }
-    fn writeb(&mut self, u: u8) {
-        self.target.writeb(u);
-        self.adler32.update(u);
-    }
-    fn is_overflow(&self) -> bool {
-        self.target.is_overflow()
-    }
-}
-
-impl<'a, T: Buf> BufAdler32<'a, T> {
-    fn new(b: &'a mut T) -> BufAdler32<'a, T> {
-        BufAdler32 {
-            adler32: RollingAdler32::from_value(1),
-            target: b,
-        }
-    }
-    fn hash(&self) -> u32 {
-        self.adler32.hash()
-    }
-}
-
-pub fn schema_write<B: Buf>(
+pub fn schema_write<B: AppendBuf>(
     mut buf: &mut B,
     values: &[ColumnValue],
     schema: &Schema2,
@@ -349,7 +265,7 @@ pub fn schema_write<B: Buf>(
     true
 }
 
-pub fn schema_read_row<B: Buf>(
+pub fn schema_read_row<B: ReadBuf>(
     mut buf: &mut B,
     values: &mut [ColumnValue],
     schema: &Schema2,
@@ -359,7 +275,10 @@ pub fn schema_read_row<B: Buf>(
     for i in 0..(aligned_len/8) {
         let hash = {
             // start checksum
-            let mut adlerbuf = BufAdler32::<B>::new(&mut buf);
+            let mut adlerbuf = ReadBufAdler32::<B>::new(&mut buf);
+//            if !check(buf, 1) {
+//                return false;
+//            }
             // read null byte giving the null state of next 8 values
             let b = read_db(&mut adlerbuf);
             // number of column remaining (0..8)
@@ -381,7 +300,15 @@ pub fn schema_read_row<B: Buf>(
                         },
                         ColumnType::String => {
                             let v = read_varstring(&mut adlerbuf);
-                            values[i * 8 + j] = ColumnValue::String { v: v };
+                            match v {
+                                Some(s) => {
+                                    values[i * 8 + j] = ColumnValue::String { v: s };
+                                }
+                                None => {
+                                    values[i * 8 + j] = ColumnValue::Null;
+                                    return false;
+                                }
+                            }
                         },
                     }
                 }
@@ -396,13 +323,13 @@ pub fn schema_read_row<B: Buf>(
     true
 }
 
-fn schema_write_row<B: Buf>(
+fn schema_write_row<B: AppendBuf>(
     mut buf: &mut B,
     values: &[ColumnValue],
 ) {
     for i in 0..(values.len() + 7)/8 {
         let hash = {
-            let mut adlerbuf = BufAdler32::<B>::new(&mut buf);
+            let mut adlerbuf = AppendBufAdler32::<B>::new(&mut buf);
 
             let jmax = min(8, values.len() - i * 8);
 
@@ -517,7 +444,7 @@ fn test_varstring() {
         write_varstring(&mut sb, u);
         sb.seek(0);
         let v = read_varstring(&mut sb);
-        assert!(u == v);
+        assert!(u == v.unwrap());
     }
 }
 
