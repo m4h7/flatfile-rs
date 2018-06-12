@@ -6,4 +6,4 @@ pub use v1::parse::parse_string;
 pub use types::{ColumnType, ColumnValue};
 pub use v2::mmapbuf::MmapBuf;
 pub use v2::write2::{read_schema_v2, schema_read_row, write_schema_v2, schema_write};
-pub use v2::filebuf::FileBuf;
+pub use v2::filebuf::{FileBuf, ReadFileBuf};
