@@ -7,7 +7,7 @@ pub struct Vecbuf {
 }
 
 impl Vecbuf {
-    fn new(size: usize) -> Vecbuf {
+    pub fn new(size: usize) -> Vecbuf {
         let mut vec = Vec::with_capacity(size);
         vec.resize(size, 0);
 
@@ -18,7 +18,7 @@ impl Vecbuf {
         }
     }
 
-    fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.buf.len()
     }
 

@@ -42,7 +42,9 @@ impl ReadFileBuf {
         let result = self.f.read(&mut self.buf);
         let (bsize, eof) = match result {
             Ok(n) => (n, n < self.buf.len()),
-            Err(_) => (0, true)
+            Err(e) => {
+                (0, true)
+            }
         };
 
         self.bsize = bsize;
@@ -69,7 +71,7 @@ impl ReadBuf for ReadFileBuf {
         }
     }
     fn past_eof(&mut self) -> bool {
-        self.eof
+        self.bpos >= self.bsize && self.eof
     }
 }
 
@@ -116,9 +118,44 @@ impl AppendBuf for FileBuf {
         if self.bpos >= self.buf.len() {
             self.flush();
             self.bpos = 0;
-        } else {
-            self.buf[self.bpos] = b;
-            self.bpos += 1;
         }
+        self.buf[self.bpos] = b;
+        self.bpos += 1;
+    }
+}
+
+#[test]
+fn rw_test()
+{
+    {
+        let mut f = File::create("/tmp/_rw.dat").unwrap();
+        let mut wf = FileBuf::new(f, 4);
+        wf.writeb(100);
+        wf.writeb(101);
+        wf.writeb(102);
+        wf.writeb(103);
+        wf.writeb(104);
+        wf.writeb(105);
+        wf.writeb(106);
+        wf.writeb(107);
+        wf.writeb(108);
+    }
+    {
+        let mut f = File::open("/tmp/_rw.dat").unwrap();
+        let mut rf = ReadFileBuf::new(f, 4);
+        assert!(!rf.past_eof());
+        assert!(rf.readb() == 100);
+        assert!(rf.readb() == 101);
+        assert!(rf.readb() == 102);
+        assert!(rf.readb() == 103);
+        assert!(rf.readb() == 104);
+        assert!(rf.readb() == 105);
+        assert!(rf.readb() == 106);
+        assert!(rf.readb() == 107);
+        assert!(!rf.eof);
+        assert!(rf.readb() == 108);
+        assert!(rf.eof);
+        assert!(rf.readb() == 0);
+        assert!(rf.eof);
     }
 }
