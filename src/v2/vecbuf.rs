@@ -50,7 +50,7 @@ impl ReadBuf for Vecbuf {
 
     #[inline]
     fn past_eof(&mut self) -> bool {
-        false // TODO
+        self.eof
     }
 }
 
