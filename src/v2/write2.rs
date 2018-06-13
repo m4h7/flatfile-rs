@@ -1,9 +1,11 @@
 use types::{ColumnType, ColumnValue};
 use std::str;
+use std::fs::File;
 use std::io::{Read, Write};
 use std::cmp::{min};
 use v2::schema2::Schema2;
 use v2::buf::{ReadBuf, AppendBuf};
+use v2::filebuf::{FileBuf, ReadFileBuf};
 use v2::adlerbuf::{ReadBufAdler32, AppendBufAdler32};
 use v2::vecbuf::Vecbuf;
 
@@ -531,5 +533,27 @@ fn test_schema_write() {
         assert!(vec[2] == rvec[2]);
         assert!(vec[3] == rvec[3]);
         assert!(vec[4] == rvec[4]);
+    }
+}
+
+#[test]
+fn test_string_rw() {
+    for n in 1..1000 {
+        let x = (0..n).map(|_| "X").collect::<String>();
+        let y = (0..n).map(|_| "Y").collect::<String>();
+        {
+            let mut f = File::create("/tmp/_string.dat").unwrap();
+            let mut wf = FileBuf::new(f, 4);
+            write_varstring(&mut wf, x.as_str());
+            write_varstring(&mut wf, y.as_str());
+        }
+        {
+            let mut f = File::open("/tmp/_string.dat").unwrap();
+            let mut rf = ReadFileBuf::new(f, 4);
+            let rx = read_varstring(&mut rf).unwrap();
+            let ry = read_varstring(&mut rf).unwrap();
+            assert!(rx == x);
+            assert!(ry == y);
+        }
     }
 }

@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use v2::buf::{ReadBuf, AppendBuf};
 
@@ -77,7 +77,6 @@ impl ReadBuf for ReadFileBuf {
 
 pub struct FileBuf {
     f: File,
-    fpos: usize,
     buf: Vec<u8>,
     bpos: usize,
 }
@@ -89,15 +88,17 @@ impl FileBuf {
 
         FileBuf {
             f: f,
-            fpos: 0,
             buf: vec,
             bpos: 0,
         }
     }
 
-    pub fn flush_all(&mut self) {
+    pub fn flush_all(&mut self) -> bool {
         let res = self.f.write(&self.buf.as_slice()[0..self.bpos]);
-        self.fpos += res.unwrap();
+        match res {
+            Ok(_) => true,
+            Err(_) => false,
+        }
     }
 }
 
@@ -138,7 +139,12 @@ fn rw_test()
         wf.writeb(105);
         wf.writeb(106);
         wf.writeb(107);
-        wf.writeb(108);
+        wf.writeb(0xEE);
+    }
+    {
+        let mut f = OpenOptions::new().append(true).open("/tmp/_rw.dat").unwrap();
+        let mut wf = FileBuf::new(f, 4);
+        wf.writeb(0xFF);
     }
     {
         let mut f = File::open("/tmp/_rw.dat").unwrap();
@@ -152,10 +158,11 @@ fn rw_test()
         assert!(rf.readb() == 105);
         assert!(rf.readb() == 106);
         assert!(rf.readb() == 107);
-        assert!(!rf.eof);
-        assert!(rf.readb() == 108);
-        assert!(rf.eof);
+        assert!(rf.readb() == 0xEE);
+        assert!(!rf.past_eof());
+        assert!(rf.readb() == 0xFF);
+        assert!(rf.past_eof());
         assert!(rf.readb() == 0);
-        assert!(rf.eof);
+        assert!(rf.past_eof());
     }
 }
