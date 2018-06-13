@@ -1,0 +1,12 @@
+[package]
+name = "flatfile-c"
+version = "0.1.0"
+authors = ["mhg <mhg@urml.eu>"]
+
+[lib]
+name = "libflatfile"
+crate-type = ["staticlib"]
+
+[dependencies]
+flatfile = { git = "https://github.com/m4h7/flatfile-rs" }
+libc = "*"
