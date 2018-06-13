@@ -95,6 +95,7 @@ impl FileBuf {
 
     pub fn flush_all(&mut self) -> bool {
         let res = self.f.write(&self.buf.as_slice()[0..self.bpos]);
+        self.bpos = 0;
         match res {
             Ok(_) => true,
             Err(_) => false,
