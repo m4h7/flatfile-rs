@@ -1,0 +1,11 @@
+dist/*
+docs/_build/*
+.tox
+*.pyc
+*.egg-info
+build/
+.coverage
+.cache/
+.eggs/
+.hypothesis/
+
