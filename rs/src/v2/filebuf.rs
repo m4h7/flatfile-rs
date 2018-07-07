@@ -34,7 +34,7 @@ impl ReadFileBuf {
         }
     }
 
-    fn fd(self) -> File {
+    pub fn fd(self) -> File {
         self.f
     }
 
