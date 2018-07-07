@@ -34,6 +34,10 @@ impl ReadFileBuf {
         }
     }
 
+    fn fd(self) -> File {
+        self.f
+    }
+
     fn refill(&mut self)
     {
         assert!(!self.eof);
