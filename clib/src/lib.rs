@@ -101,20 +101,22 @@ fn clear_read_handle(handle: usize) {
 fn put_handle(sch: Schema2) -> usize {
     let st = get_state();
     st.vec.push(sch);
-    let z = st.vec.len() - 1;
+    let mut z = st.vec.len() - 1;
+    z = z ^ 0x55AA55AA;
     z
 }
 
 fn get_schema_by_handle(handle: usize) -> &'static mut Schema2 {
     let st = get_state();
-    &mut st.vec[handle]
+    let decoded = handle ^ 0x55AA55AA;
+    &mut st.vec[decoded]
 }
 
 #[no_mangle]
 pub extern fn schema2_create() -> c_uint {
     let sch = Schema2::new();
-    let x = put_handle(sch) as c_uint;
-    x
+    let x = put_handle(sch);
+    x as c_uint
 }
 
 #[no_mangle]
@@ -223,7 +225,10 @@ pub extern fn writef_flush(handle: c_uint) {
 #[no_mangle]
 pub extern fn readf_clone_schema(handle: c_uint) -> c_uint {
     let rf = get_read_handle(handle as usize);
-    put_handle(rf.schema.clone()) as c_uint
+    let s = rf.schema.clone();
+    let slen = s.len();
+    let sch = put_handle(s) as c_uint;
+    sch
 }
 
 #[no_mangle]
@@ -260,19 +265,28 @@ pub extern fn writef_open(name: *const c_char) -> c_uint {
 #[no_mangle]
 pub extern fn readf_open(name: *const c_char) -> c_uint {
     let fname = unsafe { CStr::from_ptr(name) }.to_str().unwrap();
-    let mut f = File::open(fname).unwrap();
-    let mut mmapbuf = MmapBuf::new(f);
-    let sch = read_schema_v2(&mut mmapbuf).unwrap();
 
-    let mut readvec = Vec::new();
-    for n in 0..sch.len() {
-        readvec.push(ColumnValue::Null);
+    match File::open(fname) {
+        Ok(mut f) => {
+            let mut mmapbuf = MmapBuf::new(f);
+            let sch = read_schema_v2(&mut mmapbuf).unwrap();
+
+            let mut readvec = Vec::new();
+            for n in 0..sch.len() {
+                readvec.push(ColumnValue::Null);
+            }
+
+            let h = put_read_handle(ReadFile { m: mmapbuf,
+                                               schema: sch,
+                                               current: readvec });
+            h as c_uint
+        },
+        Err(e) => {
+            println!("File::open {:?}", e);
+            let r: i32 = -1;
+            r as c_uint
+        }
     }
-
-    let h = put_read_handle(ReadFile { m: mmapbuf,
-                                       schema: sch,
-                                       current: readvec });
-    h as c_uint
 }
 
 #[no_mangle]
@@ -304,12 +318,23 @@ pub extern fn readf_row_get_column(fhandle: c_uint) {
 }
 
 #[no_mangle]
+pub extern fn readf_row_is_null(fhandle: c_uint, index: c_uint) -> c_uint {
+    let rf = get_read_handle(fhandle as usize);
+    let uindex = index as usize;
+    let r = match rf.current[uindex] {
+        ColumnValue::Null => true,
+        _ => false,
+    };
+    r as c_uint
+}
+
+#[no_mangle]
 pub extern fn readf_row_get_u32(fhandle: c_uint, index: c_uint) -> c_uint {
     let rf = get_read_handle(fhandle as usize);
     let uindex = index as usize;
     match rf.current[uindex] {
         ColumnValue::U32 { v } => v,
-        _ => panic!("column type not u32")
+        _ => panic!("column type not u32, index: {}, debug: {:?}", uindex, rf.current[uindex])
     }
 }
 
@@ -339,7 +364,7 @@ pub extern fn readf_row_get_string(fhandle: c_uint, index: c_uint, out: *mut c_v
         ColumnValue::Null => {
             0
         },
-        _ => panic!("column type not string")
+        _ => panic!("column type not string rh={} i={} sch_len={}", fhandle, uindex, rf.schema.len())
     }
 }
 
@@ -352,10 +377,10 @@ pub extern fn writef_row_start(fhandle: c_uint) {
 }
 
 #[no_mangle]
-pub extern fn writef_row_end(fhandle: c_uint) {
+pub extern fn writef_row_end(fhandle: c_uint) -> bool {
     let wf = get_write_handle(fhandle as usize);
     let schema = get_schema_by_handle(wf.schema_handle);
-    schema_write(&mut wf.f, wf.current.as_slice(), &schema);
+    schema_write(&mut wf.f, wf.current.as_slice(), &schema)
 }
 
 #[no_mangle]
