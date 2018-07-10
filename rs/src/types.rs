@@ -43,3 +43,12 @@ pub struct Column {
     pub compression: CompressionType,
     pub nullable: bool, // TBD
 }
+
+pub trait Relation<'r> {
+    fn length(&self) -> usize;
+    fn read(&mut self) -> bool;
+    fn name(&self, n: usize) -> String;
+    fn ctype(&self, n: usize) -> ColumnType;
+    fn nullable(&self, n: usize) -> bool;
+    fn value(&self, n: usize) -> &ColumnValue;
+}

@@ -1,12 +1,13 @@
 use types::{ColumnType, ColumnValue};
 use std::str;
-use std::fs::File;
 use std::io::{Read, Write};
 use std::cmp::{min};
-use v2::schema2::Schema2;
+use v2::schema2::{Schema, Schema2};
 use v2::buf::{ReadBuf, AppendBuf};
-use v2::filebuf::{FileBuf, ReadFileBuf};
 use v2::adlerbuf::{ReadBufAdler32, AppendBufAdler32};
+
+use std::fs::{File, OpenOptions};
+use v2::filebuf::{FileBuf, ReadFileBuf};
 use v2::vecbuf::Vecbuf;
 
 extern crate lz4;

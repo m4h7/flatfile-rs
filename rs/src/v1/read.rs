@@ -1,5 +1,5 @@
 use types::{ChecksumType, CompressionType, ColumnValue, ColumnType, Column};
-use std::io::{Error, ErrorKind, Read};
+use std::io::{Read};
 extern crate lz4;
 extern crate brotli2;
 use self::brotli2::read;

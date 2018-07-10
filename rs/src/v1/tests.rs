@@ -30,6 +30,8 @@ mod tests {
             ];
             let names = ["b", "a", "d", "c"];
             md.write(&mut f, &names, &values);
+            md.write(&mut f, &names, &values);
+            md.write(&mut f, &names, &values);
         }
 
         {

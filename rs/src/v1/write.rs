@@ -71,106 +71,106 @@ pub fn schema_write<W: Write>(
         }
     }
 
-        let mut adler = RollingAdler32::from_value(0);
+    let mut adler = RollingAdler32::from_value(0);
 
-        let mut header_bits = 0;
+    let mut header_bits = 0;
 
-        for colidx in 0..columns.len() {
-            let validx = ordered[colidx];
-            let val = &values[validx];
-            match val {
-                &ColumnValue::Null => {}
-                _ => {
-                    header_bits = header_bits | (1 << colidx);
-                }
-            }
-        }
-
-        match header_bytes {
-            1 => {
-                let mut b = [0; 1];
-                b[0] = header_bits as u8;
-                adler.update_buffer(&b);
-                let r = writer.write(&b);
-                r.expect("write h 1");
-            }
-            2 => {
-                let mut b = [0; 2];
-                b[0] = (header_bits & 0xff) as u8;
-                b[1] = (header_bits >> 8) as u8;
-                let r = writer.write(&b);
-                r.expect("write h 2");
-                adler.update_buffer(&b);
-            }
-            3 => {
-                let mut b = [0; 4]; // 4!
-                b[0] = (header_bits & 0xff) as u8;
-                b[1] = (header_bits >> 8) as u8;
-                b[2] = (header_bits >> 16) as u8;
-                adler.update_buffer(&b);
-                let r = writer.write(&b);
-                r.expect("write h 3");
-            }
-            4 => {
-                let mut b = [0; 4];
-                b[0] = (header_bits & 0xff) as u8;
-                b[1] = (header_bits >> 8) as u8;
-                b[2] = (header_bits >> 16) as u8;
-                b[3] = (header_bits >> 24) as u8;
-                adler.update_buffer(&b);
-                let r = writer.write(&b);
-                r.expect("write h 4");
-            }
+    for colidx in 0..columns.len() {
+        let validx = ordered[colidx];
+        let val = &values[validx];
+        match val {
+            &ColumnValue::Null => {}
             _ => {
-                panic!("unsupported header_bytes value");
+                header_bits = header_bits | (1 << colidx);
             }
         }
+    }
 
-        let mut compressed: Vec<Option<Vec<u8>>> = vec![None; ordered.len()];
+    match header_bytes {
+        1 => {
+            let mut b = [0; 1];
+            b[0] = header_bits as u8;
+            adler.update_buffer(&b);
+            let r = writer.write(&b);
+            r.expect("write h 1");
+        }
+        2 => {
+            let mut b = [0; 2];
+            b[0] = (header_bits & 0xff) as u8;
+            b[1] = (header_bits >> 8) as u8;
+            let r = writer.write(&b);
+            r.expect("write h 2");
+            adler.update_buffer(&b);
+        }
+        3 => {
+            let mut b = [0; 4]; // 4!
+            b[0] = (header_bits & 0xff) as u8;
+            b[1] = (header_bits >> 8) as u8;
+            b[2] = (header_bits >> 16) as u8;
+            adler.update_buffer(&b);
+            let r = writer.write(&b);
+            r.expect("write h 3");
+        }
+        4 => {
+            let mut b = [0; 4];
+            b[0] = (header_bits & 0xff) as u8;
+            b[1] = (header_bits >> 8) as u8;
+            b[2] = (header_bits >> 16) as u8;
+            b[3] = (header_bits >> 24) as u8;
+            adler.update_buffer(&b);
+            let r = writer.write(&b);
+            r.expect("write h 4");
+        }
+        _ => {
+            panic!("unsupported header_bytes value");
+        }
+    }
 
-        for colidx in 0..columns.len() {
-            let validx = ordered[colidx];
-            let val = &values[validx];
-            match val {
-                &ColumnValue::String { ref v } => {
-                    let col = &columns[colidx];
-                    match col.compression {
-                        CompressionType::Brotli => {
-                            panic!("brotli compression not supported yet");
-                        }
-                        CompressionType::Lz4 => {
-                            let buf = Vec::new();
-                            let mut fo = lz4::EncoderBuilder::new()
-                                .checksum(lz4::ContentChecksum::NoChecksum)
-//                                .checksum(lz4::ContentChecksum::ChecksumEnabled)
-//                                .block_size(lz4::BlockSize::Max64KB)
-                                .block_size(lz4::BlockSize::Default)
-                                .block_mode(lz4::BlockMode::Linked)
-//                                .block_mode(lz4::BlockMode::Independent)
-//                                .level(16)
-                                .build(buf)
-                                .unwrap();
-                            let b = v.as_bytes();
-                            let wr = fo.write(&b);
-                            wr.expect("write wr");
-                            let (w, res) = fo.finish();
-                            res.expect("compression finish");
-                            if b.len() > 0 {
-                                assert!(w.len() != 0);
-                            }
-                            compressed[colidx] = Some(w);
-                        }
-                        CompressionType::Zlib => {
-                            panic!("zlib compression not supported yet");
-                        }
-                        CompressionType::None => {}
+    let mut compressed: Vec<Option<Vec<u8>>> = vec![None; ordered.len()];
+
+    for colidx in 0..columns.len() {
+        let validx = ordered[colidx];
+        let val = &values[validx];
+        match val {
+            &ColumnValue::String { ref v } => {
+                let col = &columns[colidx];
+                match col.compression {
+                    CompressionType::Brotli => {
+                        panic!("brotli compression not supported yet");
                     }
+                    CompressionType::Lz4 => {
+                        let buf = Vec::new();
+                        let mut fo = lz4::EncoderBuilder::new()
+                            .checksum(lz4::ContentChecksum::NoChecksum)
+//                            .checksum(lz4::ContentChecksum::ChecksumEnabled)
+//                            .block_size(lz4::BlockSize::Max64KB)
+                            .block_size(lz4::BlockSize::Default)
+                            .block_mode(lz4::BlockMode::Linked)
+//                            .block_mode(lz4::BlockMode::Independent)
+//                            .level(16)
+                            .build(buf)
+                            .unwrap();
+                        let b = v.as_bytes();
+                        let wr = fo.write(&b);
+                        wr.expect("write wr");
+                        let (w, res) = fo.finish();
+                        res.expect("compression finish");
+                        if b.len() > 0 {
+                            assert!(w.len() != 0);
+                        }
+                        compressed[colidx] = Some(w);
+                    }
+                    CompressionType::Zlib => {
+                        panic!("zlib compression not supported yet");
+                    }
+                    CompressionType::None => {}
                 }
-                _ => {}
             }
+            _ => {}
         }
+    }
 
-        for colidx in 0..columns.len() {
+    for colidx in 0..columns.len() {
             let validx = ordered[colidx];
             let val = &values[validx];
             match val {

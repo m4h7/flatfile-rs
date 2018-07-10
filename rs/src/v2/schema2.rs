@@ -1,5 +1,12 @@
 use types::{ColumnType};
 
+pub trait Schema {
+    fn len(&self) -> usize;
+    fn name(&self, index: usize) -> &str;
+    fn ctype(&self, index: usize) -> ColumnType;
+    fn nullable(&self, index: usize) -> bool;
+}
+
 #[derive(Clone)]
 pub struct Schema2 {
     pub names: Vec<String>,
@@ -16,10 +23,6 @@ impl Schema2 {
         }
     }
 
-    pub fn len(&self) -> usize {
-        self.names.len()
-    }
-
     pub fn add(&mut self,
                name: &str,
                ctype: ColumnType,
@@ -28,16 +31,22 @@ impl Schema2 {
         self.types.push(ctype);
         self.nullable.push(nullable);
     }
+}
 
-    pub fn name(&self, index: usize) -> &str {
+impl Schema for Schema2 {
+    fn len(&self) -> usize {
+        self.names.len()
+    }
+
+    fn name(&self, index: usize) -> &str {
         self.names[index].as_str()
     }
 
-    pub fn ctype(&self, index: usize) -> ColumnType {
+    fn ctype(&self, index: usize) -> ColumnType {
         self.types[index]
     }
 
-    pub fn nullable(&self, index: usize) -> bool {
+    fn nullable(&self, index: usize) -> bool {
         self.nullable[index]
     }
 }

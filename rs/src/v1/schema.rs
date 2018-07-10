@@ -1,4 +1,4 @@
-use types::{ChecksumType, Column, ColumnType, CompressionType, ColumnValue};
+use types::{ChecksumType, Column, ColumnValue};
 use v1::row::{Row};
 use v1::write::{schema_write};
 use v1::read::schema_read;
