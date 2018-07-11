@@ -9,4 +9,5 @@ module1 = Extension('_flatfile',
 setup(name='Flatfile',
       version='1.0',
       description='flatfile package',
+      packages=["flatfile"],
       ext_modules=[module1])
