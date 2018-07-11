@@ -43,6 +43,6 @@ void writef_row_set_u32(
     );
 void writef_row_set_u64(unsigned int handle, unsigned int index, unsigned long value);
 void writef_row_set_string(unsigned int handle, unsigned int index, char const* s);
-void writef_row_end(unsigned int handle);
+bool writef_row_end(unsigned int handle);
 
 #endif // FLATFILE_H_INCLUDED
