@@ -97,6 +97,17 @@ flatfile_writef_create(PyObject* self, PyObject* args) {
 }
 
 static PyObject*
+flatfile_writef_open(PyObject* self, PyObject* args) {
+    char const* name = NULL;
+    unsigned int schandle = 0;
+    if (!PyArg_ParseTuple(args, "s", &name)) {
+        return NULL;
+    }
+    unsigned int fhandle = writef_open(name);
+    return PyLong_FromLong(fhandle);
+}
+
+static PyObject*
 flatfile_readf_close(PyObject* self, PyObject* args) {
     unsigned int fhandle = 0;
     if (!PyArg_ParseTuple(args, "I", &fhandle)) {
@@ -152,8 +163,19 @@ flatfile_writef_row_end(PyObject* self, PyObject* args) {
     if (!PyArg_ParseTuple(args, "I", &fhandle)) {
         return NULL;
     }
-    writef_row_end(fhandle);
-    return PyLong_FromLong(0);
+    _Bool r = writef_row_end(fhandle);
+    return PyBool_FromLong(r);
+}
+
+static PyObject*
+flatfile_readf_row_is_null(PyObject* self, PyObject* args) {
+    unsigned int fhandle = 0;
+    unsigned int index = 0;
+    if (!PyArg_ParseTuple(args, "II", &fhandle, &index)) {
+        return NULL;
+    }
+    unsigned int u32val = readf_row_is_null(fhandle, index);
+    return PyBool_FromLong(u32val);
 }
 
 static PyObject*
@@ -185,6 +207,16 @@ flatfile_readf_clone_schema(PyObject* self, PyObject* args) {
         return NULL;
     }
     unsigned long val = readf_clone_schema(fhandle);
+    return PyLong_FromLong(val);
+}
+
+static PyObject*
+flatfile_writef_get_schema(PyObject* self, PyObject* args) {
+    unsigned int fhandle = 0;
+    if (!PyArg_ParseTuple(args, "I", &fhandle, &index)) {
+        return NULL;
+    }
+    unsigned long val = writef_get_schema(fhandle);
     return PyLong_FromLong(val);
 }
 
@@ -246,6 +278,8 @@ static PyMethodDef SpamMethods[] = {
     {"schema2_get_column_type", flatfile_schema2_get_column_type, METH_VARARGS, "schema2_get_column_name doc."},
     {"schema2_get_column_nullable", flatfile_schema2_get_column_nullable, METH_VARARGS, "schema2_get_column_name doc."},
 
+    {"writef_open", flatfile_writef_open, METH_VARARGS, "writef_open_doc"},
+    {"writef_get_schema", flatfile_writef_get_schema, METH_VARARGS, "writef_get_schema"},
     {"writef_create", flatfile_writef_create, METH_VARARGS, "writef_create doc"},
     {"writef_row_start", flatfile_writef_row_start, METH_VARARGS, "writef_row_start"},
     {"writef_row_end", flatfile_writef_row_end, METH_VARARGS, "writef_row_start"},
@@ -259,6 +293,7 @@ static PyMethodDef SpamMethods[] = {
     {"readf_row_start", flatfile_readf_row_start, METH_VARARGS, "readf_row_start_doc"},
     {"readf_row_end", flatfile_readf_row_end, METH_VARARGS, "readf_row_end_doc"},
 
+    {"readf_row_is_null", flatfile_readf_row_is_null, METH_VARARGS, "readf_row_is_null_doc"},
     {"readf_row_get_u32", flatfile_readf_row_get_u32, METH_VARARGS, "readf_row_get_u32_doc"},
     {"readf_row_get_u64", flatfile_readf_row_get_u64, METH_VARARGS, "readf_row_get_u64_doc"},
     {"readf_row_get_string", flatfile_readf_row_get_string, METH_VARARGS, "readf_row_get_string_doc"},
@@ -269,7 +304,7 @@ static PyMethodDef SpamMethods[] = {
 
 static struct PyModuleDef flatfilemodule = {
     PyModuleDef_HEAD_INIT,
-    "flatfile",   /* name of module */
+    "_flatfile",   /* name of module */
     NULL, /* module documentation, may be NULL */
     -1,       /* size of per-interpreter state of the module,
                  or -1 if the module keeps state in global variables. */
@@ -277,7 +312,7 @@ static struct PyModuleDef flatfilemodule = {
 };
 
 PyMODINIT_FUNC
-PyInit_flatfile(void)
+PyInit__flatfile(void)
 {
     return PyModule_Create(&flatfilemodule);
 }

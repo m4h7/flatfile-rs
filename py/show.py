@@ -1,5 +1,5 @@
 import sys
-import flatfile
+import _flatfile as flatfile
 
 rh = flatfile.readf_open(sys.argv[1])
 sch = flatfile.readf_clone_schema(rh)
@@ -12,20 +12,24 @@ for i in range(0, slen):
 
 flatfile.schema2_destroy(sch)
 
+
 def read_row(rh, types):
     if flatfile.readf_row_start(rh):
         r = []
         for index, t in enumerate(types):
-            if t == 'u32':
+            if flatfile.readf_row_is_null(rh, index):
+                val = None
+            elif t == "u32":
                 val = flatfile.readf_row_get_u32(rh, index)
-            elif t == 'u64':
+            elif t == "u64":
                 val = flatfile.readf_row_get_u64(rh, index)
-            elif t == 'string':
+            elif t == "string":
                 val = flatfile.readf_row_get_string(rh, index)
             r.append(val)
         flatfile.readf_row_end(rh)
         return r
     return None
+
 
 while True:
     r = read_row(rh, types)
@@ -33,4 +37,3 @@ while True:
         print(r)
     else:
         break
-

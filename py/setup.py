@@ -1,6 +1,6 @@
 from distutils.core import setup, Extension
 
-module1 = Extension('flatfile',
+module1 = Extension('_flatfile',
                     include_dirs = ['../include'],
                     libraries = ['libflatfile', 'resolv'],
                     library_dirs = ['../clib/target/debug'],
