@@ -109,6 +109,10 @@ fn put_handle(sch: Schema2) -> usize {
 fn get_schema_by_handle(handle: usize) -> &'static mut Schema2 {
     let st = get_state();
     let decoded = handle ^ 0x55AA55AA;
+    if decoded >= st.vec.len() {
+        panic!("get_schema_by_handle: handle={:x} decoded={} len={}",
+               handle, decoded, st.vec.len());
+    }
     &mut st.vec[decoded]
 }
 
