@@ -1,5 +1,6 @@
 from flatfile import Reader, Writer, Appender
 import _flatfile as flatfile
+import os
 
 sch = flatfile.schema2_create()
 flatfile.schema2_add_column(sch, "first", "u32", False)
@@ -45,6 +46,16 @@ def test_reader_no_schema():
 
 def test_appender():
     with Appender("/tmp/_test2.dat", rw_schema) as a:
+        print("a", a.schema)
+        r = a.write_row([2, 4, 5, None, "world"])
+        assert r is True
+
+def test_appender_new():
+    try:
+        os.unlink('/tmp/_test3.dat')
+    except FileNotFoundError:
+        pass
+    with Appender("/tmp/_test3.dat", rw_schema) as a:
         print("a", a.schema)
         r = a.write_row([2, 4, 5, None, "world"])
         assert r is True
@@ -116,3 +127,4 @@ test_writer()
 test_appender()
 test_reader()
 test_reader_no_schema()
+test_appender_new()
