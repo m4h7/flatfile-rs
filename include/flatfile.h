@@ -6,10 +6,10 @@
 /**
  * schema functions
  */
-unsigned int schema2_create();
+unsigned long schema2_create();
 int schema2_len(unsigned int schema_handle);
 void schema2_destroy(unsigned int schema_handle);
-int schema2_add_column(unsigned int schema_handle,
+int schema2_add_column(unsigned long schema_handle,
                        char const* name,
                        char const* ctype,
                        _Bool nullable);

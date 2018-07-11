@@ -117,7 +117,7 @@ fn get_schema_by_handle(handle: usize) -> &'static mut Schema2 {
 }
 
 #[no_mangle]
-pub extern fn schema2_create() -> c_uint {
+pub extern fn schema2_create() -> c_ulong {
     let sch = Schema2::new();
     let x = put_handle(sch);
     x as c_uint
