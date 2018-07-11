@@ -26,11 +26,11 @@ flatfile_schema2_len(PyObject *self, PyObject *args)
 static PyObject *
 flatfile_schema2_add_column(PyObject *self, PyObject *args)
 {
-    unsigned int handle;
+    unsigned long handle = 0;
     char const* name;
     char const* ctype;
     _Bool nullable;
-    if (!PyArg_ParseTuple(args, "Issp", &handle, &name, &ctype, &nullable)) {
+    if (!PyArg_ParseTuple(args, "kssp", &handle, &name, &ctype, &nullable)) {
         return NULL;
     }
     schema2_add_column(handle, name, ctype, nullable);
