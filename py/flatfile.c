@@ -227,10 +227,22 @@ flatfile_readf_row_get_string(PyObject* self, PyObject* args) {
     if (!PyArg_ParseTuple(args, "II", &fhandle, &index)) {
         return NULL;
     }
-    char buf[4096] = { 0 } ;
-    unsigned long buflen = sizeof(buf);
-    unsigned long len = readf_row_get_string(fhandle, index, buf, buflen);
-    return PyUnicode_FromStringAndSize(buf, len);
+    unsigned long stringlen = readf_row_get_string_len(fhandle, index);
+    if (stringlen < 1024) {
+        char buf[1024] = { 0 } ;
+        unsigned long buflen = sizeof(buf);
+        unsigned long len = readf_row_get_string(fhandle, index, buf, buflen);
+        return PyUnicode_FromStringAndSize(buf, len);
+    } else {
+        char* buf = malloc(stringlen + 1);
+        memset(buf, 0, stringlen);
+        unsigned long buflen = stringlen;
+        unsigned long len = readf_row_get_string(fhandle, index, buf, buflen);
+        assert(len == buflen);
+        PyObject* ret = PyUnicode_FromStringAndSize(buf, len);
+        free(buf);
+        return ret;
+    }
 }
 
 static PyObject*

@@ -353,6 +353,22 @@ pub extern fn readf_row_get_u64(fhandle: c_uint, index: c_uint) -> c_ulong {
 }
 
 #[no_mangle]
+pub extern fn readf_row_get_string_len(fhandle: c_uint, index: c_uint) -> c_ulong {
+    let rf = get_read_handle(fhandle as usize);
+    let uindex = index as usize;
+    match rf.current[uindex] {
+        ColumnValue::String { ref v } => {
+            let u = v.as_str().as_bytes();
+            v.len() as c_ulong
+        }
+        ColumnValue::Null => {
+            0
+        },
+        _ => panic!("column type not string rh={} i={} sch_len={}", fhandle, uindex, rf.schema.len())
+    }
+}
+
+#[no_mangle]
 pub extern fn readf_row_get_string(fhandle: c_uint, index: c_uint, out: *mut c_void, size: c_ulong) -> c_ulong {
     let rf = get_read_handle(fhandle as usize);
     let uindex = index as usize;
