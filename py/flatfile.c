@@ -186,7 +186,7 @@ flatfile_readf_row_get_u32(PyObject* self, PyObject* args) {
         return NULL;
     }
     unsigned int u32val = readf_row_get_u32(fhandle, index);
-    return PyLong_FromLong(u32val);
+    return PyLong_FromUnsignedLong(u32val);
 }
 
 static PyObject*
@@ -197,7 +197,7 @@ flatfile_readf_row_get_u64(PyObject* self, PyObject* args) {
         return NULL;
     }
     unsigned long u64val = readf_row_get_u64(fhandle, index);
-    return PyLong_FromLong(u64val);
+    return PyLong_FromUnsignedLong(u64val);
 }
 
 static PyObject*
@@ -207,7 +207,7 @@ flatfile_readf_clone_schema(PyObject* self, PyObject* args) {
         return NULL;
     }
     unsigned long val = readf_clone_schema(fhandle);
-    return PyLong_FromLong(val);
+    return PyLong_FromUnsignedLong(val);
 }
 
 static PyObject*
@@ -217,7 +217,7 @@ flatfile_writef_get_schema(PyObject* self, PyObject* args) {
         return NULL;
     }
     unsigned long val = writef_get_schema(fhandle);
-    return PyLong_FromLong(val);
+    return PyLong_FromUnsignedLong(val);
 }
 
 static PyObject*
@@ -249,8 +249,8 @@ static PyObject*
 flatfile_writef_row_set_u32(PyObject* self, PyObject* args) {
     unsigned int fhandle = 0;
     unsigned int index = 0;
-    unsigned int value = 0;
-    if (!PyArg_ParseTuple(args, "III", &fhandle, &index, &value)) {
+    unsigned long value = 0;
+    if (!PyArg_ParseTuple(args, "IIk", &fhandle, &index, &value)) {
         return NULL;
     }
     writef_row_set_u32(fhandle, index, value);
@@ -262,7 +262,7 @@ flatfile_writef_row_set_u64(PyObject* self, PyObject* args) {
     unsigned int fhandle = 0;
     unsigned int index = 0;
     unsigned long long value = 0;
-    if (!PyArg_ParseTuple(args, "III", &fhandle, &index, &value)) {
+    if (!PyArg_ParseTuple(args, "IIK", &fhandle, &index, &value)) {
         return NULL;
     }
     writef_row_set_u64(fhandle, index, value);
