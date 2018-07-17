@@ -7,6 +7,7 @@ use std::sync::{Once, ONCE_INIT};
 extern crate libc;
 use libc::{memcpy, c_void};
 use std::mem::transmute;
+use flatfile::v2::schema2::Schema;
 
 extern crate flatfile;
 use flatfile::v2::schema2::Schema2;

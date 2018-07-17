@@ -26,15 +26,24 @@ flatfile_schema2_len(PyObject *self, PyObject *args)
 static PyObject *
 flatfile_schema2_add_column(PyObject *self, PyObject *args)
 {
-    unsigned long handle = 0;
-    char const* name;
-    char const* ctype;
-    _Bool nullable;
-    if (!PyArg_ParseTuple(args, "kssp", &handle, &name, &ctype, &nullable)) {
+    PyObject *ret = NULL;
+
+    unsigned long handle = 0xFFFFFFFF;
+    char const* name = NULL;
+    char const* ctype = NULL;
+    int nullable = 0;
+
+    if (!PyArg_ParseTuple(args, "lssi", &handle, &name, &ctype, &nullable)) {
         return NULL;
     }
+
     schema2_add_column(handle, name, ctype, nullable);
-    return PyLong_FromLong(0);
+
+    Py_INCREF(Py_None);
+    ret = Py_None;
+    assert(! PyErr_Occurred());
+    assert(ret);
+    return ret;
 }
 
 static PyObject *
@@ -266,7 +275,7 @@ flatfile_writef_row_set_u64(PyObject* self, PyObject* args) {
         return NULL;
     }
     writef_row_set_u64(fhandle, index, value);
-    return PyLong_FromLong(0);
+    return PyLong_FromLong(0); // TODO None
 }
 
 static PyObject*
