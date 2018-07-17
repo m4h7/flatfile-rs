@@ -2,11 +2,19 @@ import _flatfile
 import os.path
 
 class Reader:
-    def __init__(self, filename, schema):
+    def __init__(self, filename, schema = None):
         self.filename = filename
         self.schema = schema
         self.h = None
         self.sch = None
+
+    def fetch_columns(self, columns):
+        while True:
+            row = self.read_columns(columns)
+            if row:
+                yield row
+            else:
+                break
 
     def fetch(self):
         while True:
@@ -15,6 +23,33 @@ class Reader:
                 yield row
             else:
                 break
+
+    def read_columns(self, columns):
+        if not _flatfile.readf_row_start(self.h):
+            return None
+        val = []
+        for index, item in enumerate(self.schema):
+            name, _type, nullable = item
+            if name in columns:
+                if nullable and _flatfile.readf_row_is_null(self.h, index):
+                    v = None
+                elif _type == "u32":
+                    v = _flatfile.readf_row_get_u32(self.h, index)
+                elif _type == "u64":
+                    v = _flatfile.readf_row_get_u64(self.h, index)
+                elif _type == "string":
+                    v = _flatfile.readf_row_get_string(self.h, index)
+                else:
+                    raise Exception(
+                        "unknown type in schema: #{}. {} {} {}",
+                        index,
+                        name,
+                        _type,
+                        nullable,
+                    )
+                val.append(v)
+        _flatfile.readf_row_end(self.h)
+        return val
 
     def read_row(self):
         if not _flatfile.readf_row_start(self.h):
