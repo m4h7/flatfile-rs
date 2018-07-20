@@ -98,6 +98,14 @@ void writef_row_complete_callback(napi_env env, napi_status status, void* data)
 
     napi_call_function(env, ctx, callback, 2, argv, NULL);
     napi_close_handle_scope(env, scope);
+    status = napi_delete_reference(env, self->callback);
+    assert(status == napi_ok);
+    status = napi_delete_reference(env, self->array);
+    assert(status == napi_ok);
+    status = napi_delete_reference(env, self->ctx);
+    assert(status == napi_ok);
+    status = napi_delete_reference(env, self->error);
+    assert(status == napi_ok);
 }
 
 
@@ -836,11 +844,16 @@ napi_value f_readf_row(napi_env env, napi_callback_info info) {
     status = napi_get_value_int32(env, argv[0], &self->r_handle);
     if (status != napi_ok) {
         napi_create_error2(env, "Invalid number was passed as argument (handle)", &self->error);
+        free(self);
+        self = NULL;
+        return NULL;
     }
 
     status = napi_create_reference(env, argv[1], 1, &(self->error_callback));
     if (status != napi_ok) {
         napi_throw_error(env, NULL, "Failed to parse argument 1");
+        free(self);
+        self = NULL;
         return NULL;
     }
 
