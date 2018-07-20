@@ -831,6 +831,15 @@ void readf_row_complete_callback(napi_env env, napi_status status, void* data)
         napi_throw_error(env, NULL, "Failed to call callback");
     }
     napi_close_handle_scope(env, scope);
+
+    status = napi_delete_reference(env, self->error_callback);
+    assert(status == napi_ok);
+    status = napi_delete_reference(env, self->next_callback);
+    assert(status == napi_ok);
+    status = napi_delete_reference(env, self->complete_callback);
+    assert(status == napi_ok);
+
+    free(self);
 }
 
 
