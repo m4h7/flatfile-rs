@@ -1,5 +1,6 @@
 #include <node_api.h>
 
+#include <assert.t>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
