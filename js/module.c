@@ -72,9 +72,6 @@ void writef_row_complete_callback(napi_env env, napi_status status, void* data)
 {
     write_row_data_t* self = data;
 
-    // TODO: does not work in node 10.4.0
-//    napi_delete_async_work(env, self->work);
-
     napi_handle_scope scope;
     napi_open_handle_scope(env, &scope);
 
@@ -112,6 +109,11 @@ void writef_row_complete_callback(napi_env env, napi_status status, void* data)
         status = napi_delete_reference(env, self->ctx);
         assert(status == napi_ok);
     }
+
+    free(self);
+
+    // TODO: does not work in node 10.4.0
+//    napi_delete_async_work(env, self->work);
 }
 
 
