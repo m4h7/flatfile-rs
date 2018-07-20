@@ -103,10 +103,14 @@ void writef_row_complete_callback(napi_env env, napi_status status, void* data)
     assert(status == napi_ok);
     status = napi_delete_reference(env, self->array);
     assert(status == napi_ok);
-    status = napi_delete_reference(env, self->ctx);
-    assert(status == napi_ok);
-    status = napi_delete_reference(env, self->error);
-    assert(status == napi_ok);
+    if (self->ctx) {
+        status = napi_delete_reference(env, self->ctx);
+        assert(status == napi_ok);
+    }
+    if (self->error) {
+        status = napi_delete_reference(env, self->error);
+        assert(status == napi_ok);
+    }
 }
 
 
