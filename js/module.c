@@ -99,16 +99,17 @@ void writef_row_complete_callback(napi_env env, napi_status status, void* data)
 
     napi_call_function(env, ctx, callback, 2, argv, NULL);
     napi_close_handle_scope(env, scope);
+
     status = napi_delete_reference(env, self->callback);
     assert(status == napi_ok);
+    self->callback = NULL;
+
     status = napi_delete_reference(env, self->array);
     assert(status == napi_ok);
+    self->array = NULL;
+
     if (self->ctx) {
         status = napi_delete_reference(env, self->ctx);
-        assert(status == napi_ok);
-    }
-    if (self->error) {
-        status = napi_delete_reference(env, self->error);
         assert(status == napi_ok);
     }
 }
