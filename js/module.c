@@ -7,10 +7,8 @@
 
 #include "flatfile.h"
 
-napi_status napi_create_error2(napi_env env,
-                               char const* str,
-                               napi_value* result)
-{
+napi_status napi_create_error2(napi_env env, char const* str,
+                               napi_value* result) {
     fprintf(stderr, "napi_create_error2 %s\n", str);
     napi_value code, msg;
     napi_status status;
@@ -25,15 +23,15 @@ napi_status napi_create_error2(napi_env env,
         return status;
     }
 
-     status = napi_create_error(env, NULL, msg, result);
-     return status;
+    status = napi_create_error(env, NULL, msg, result);
+    return status;
 }
 
 typedef struct {
-    int w_handle;   // write_handle
-    napi_ref array;    // array with values to write
-    napi_ref callback; // callback
-    napi_ref ctx;      // this
+    int w_handle;       // write_handle
+    napi_ref array;     // array with values to write
+    napi_ref callback;  // callback
+    napi_ref ctx;       // this
 
     napi_async_work work;
     napi_value async_resource_name;
@@ -41,10 +39,9 @@ typedef struct {
     napi_value error;
 } write_row_data_t;
 
-
 typedef struct {
     int r_handle;
-    int result; // result of schema_read_row
+    int result;  // result of schema_read_row
 
     napi_ref error_callback;
     napi_ref next_callback;
@@ -55,9 +52,7 @@ typedef struct {
     napi_value error;
 } read_row_data_t;
 
-
-void writef_row_execute_callback(napi_env env, void *data)
-{
+void writef_row_execute_callback(napi_env env, void* data) {
     write_row_data_t* self = data;
     if (self->error) {
         fprintf(stderr, "Exec callback skip due to error\n");
@@ -67,9 +62,8 @@ void writef_row_execute_callback(napi_env env, void *data)
     writef_flush(self->w_handle);
 }
 
-
-void writef_row_complete_callback(napi_env env, napi_status status, void* data)
-{
+void writef_row_complete_callback(napi_env env, napi_status status,
+                                  void* data) {
     write_row_data_t* self = data;
 
     napi_handle_scope scope;
@@ -126,9 +120,8 @@ void writef_row_complete_callback(napi_env env, napi_status status, void* data)
     free(self);
 
     // TODO: does not work in node 10.4.0
-//    napi_delete_async_work(env, self->work);
+    //    napi_delete_async_work(env, self->work);
 }
-
 
 napi_value f_writef_row(napi_env env, napi_callback_info info) {
     size_t argc = 4;
@@ -147,12 +140,15 @@ napi_value f_writef_row(napi_env env, napi_callback_info info) {
 
     status = napi_get_value_int32(env, argv[0], &self->w_handle);
     if (status != napi_ok) {
-        napi_create_error2(env, "Invalid number was passed as argument (handle)", &self->error);
+        napi_create_error2(env,
+                           "Invalid number was passed as argument (handle)",
+                           &self->error);
     }
 
-//        napi_extended_error_info* extended;
-//        napi_get_last_error_info(env, &extended);
-//        fprintf(stderr, "status 0 %d %s", status, extended->error_message);
+    //        napi_extended_error_info* extended;
+    //        napi_get_last_error_info(env, &extended);
+    //        fprintf(stderr, "status 0 %d %s", status,
+    //        extended->error_message);
 
     status = napi_create_reference(env, argv[1], 1, &(self->array));
     if (status != napi_ok) {
@@ -168,7 +164,8 @@ napi_value f_writef_row(napi_env env, napi_callback_info info) {
 
     napi_valuetype argv3type;
     status = napi_typeof(env, argv[3], &argv3type);
-    if (status == napi_ok && (argv3type == napi_null || argv3type == napi_undefined)) {
+    if (status == napi_ok &&
+        (argv3type == napi_null || argv3type == napi_undefined)) {
         self->ctx = NULL;
     } else {
         status = napi_create_reference(env, argv[3], 1, &(self->ctx));
@@ -179,7 +176,8 @@ napi_value f_writef_row(napi_env env, napi_callback_info info) {
         }
     }
 
-    status = napi_create_string_utf8(env, "writef_row", -1, &(self->async_resource_name));
+    status = napi_create_string_utf8(env, "writef_row", -1,
+                                     &(self->async_resource_name));
     if (status != napi_ok) {
         napi_throw_error(env, NULL, "failed to create resource name");
         return NULL;
@@ -239,11 +237,10 @@ napi_value f_writef_row(napi_env env, napi_callback_info info) {
         if (valuetype == napi_undefined || valuetype == napi_null) {
             // do nothing
         } else if (valuetype == napi_number) {
-
             unsigned int sch = writef_get_schema(self->w_handle);
 
-            char column_type[1024] = { 0 };
-            char column_name[128] = { 0 };
+            char column_type[1024] = {0};
+            char column_name[128] = {0};
 
             schema2_get_column_name(sch, i, column_name);
             schema2_get_column_type(sch, i, column_type);
@@ -252,7 +249,9 @@ napi_value f_writef_row(napi_env env, napi_callback_info info) {
                 int i32val = -1;
                 status = napi_get_value_int32(env, value, &i32val);
                 if (status != napi_ok) {
-                    napi_create_error2(env, "Invalid number was passed as argument (u32)", &self->error);
+                    napi_create_error2(
+                        env, "Invalid number was passed as argument (u32)",
+                        &self->error);
                 } else {
                     writef_row_set_u32(self->w_handle, i, i32val);
                 }
@@ -260,22 +259,27 @@ napi_value f_writef_row(napi_env env, napi_callback_info info) {
                 int i64val = -1;
                 status = napi_get_value_int32(env, value, &i64val);
                 if (status != napi_ok) {
-                    napi_create_error2(env, "Invalid number was passed as argument (u64)", &self->error);
+                    napi_create_error2(
+                        env, "Invalid number was passed as argument (u64)",
+                        &self->error);
                 } else {
                     writef_row_set_u64(self->w_handle, i, i64val);
                 }
             } else {
-                fprintf(stderr, "schema type is %s expecting u32/64 for number (name %s)\n", column_type, column_name);
+                fprintf(
+                    stderr,
+                    "schema type is %s expecting u32/64 for number (name %s)\n",
+                    column_type, column_name);
                 napi_create_error2(
-                    env,
-                    "Schema type is not u32/u64 but expecting number",
+                    env, "Schema type is not u32/u64 but expecting number",
                     &self->error);
             }
 
         } else if (valuetype == napi_string) {
-            char buf[4096] = { 0 };
+            char buf[4096] = {0};
             size_t buflen = 0;
-            status = napi_get_value_string_utf8(env, value, buf, sizeof(buf), &buflen);
+            status = napi_get_value_string_utf8(env, value, buf, sizeof(buf),
+                                                &buflen);
             if (status != napi_ok) {
                 napi_create_error2(env, "not a string", &self->error);
             } else {
@@ -287,18 +291,15 @@ napi_value f_writef_row(napi_env env, napi_callback_info info) {
 
         status = napi_close_handle_scope(env, scope);
         if (status != napi_ok) {
-            napi_create_error2(env, "napi_close_handle_scope error", &self->error);
+            napi_create_error2(env, "napi_close_handle_scope error",
+                               &self->error);
             break;
         }
     }
 
-    status = napi_create_async_work(env,
-                           NULL,
-                           self->async_resource_name,
-                           writef_row_execute_callback,
-                           writef_row_complete_callback,
-                           self,
-                           &(self->work));
+    status = napi_create_async_work(
+        env, NULL, self->async_resource_name, writef_row_execute_callback,
+        writef_row_complete_callback, self, &(self->work));
 
     if (status != napi_ok) {
         napi_throw_error(env, NULL, "napi_create_async_work failed");
@@ -320,7 +321,6 @@ napi_value f_writef_row(napi_env env, napi_callback_info info) {
     return undef;
 }
 
-
 napi_value f_schema2_create(napi_env env, napi_callback_info info) {
     unsigned int rc = schema2_create();
 
@@ -328,7 +328,6 @@ napi_value f_schema2_create(napi_env env, napi_callback_info info) {
     napi_create_int32(env, rc, &retval);
     return retval;
 }
-
 
 napi_value f_schema2_destroy(napi_env env, napi_callback_info info) {
     size_t argc = 1;
@@ -359,7 +358,6 @@ napi_value f_schema2_destroy(napi_env env, napi_callback_info info) {
     return undef;
 }
 
-
 napi_value f_schema2_len(napi_env env, napi_callback_info info) {
     size_t argc = 1;
 
@@ -385,7 +383,6 @@ napi_value f_schema2_len(napi_env env, napi_callback_info info) {
     napi_create_int32(env, len, &retval);
     return retval;
 }
-
 
 napi_value f_schema2_get_column_name(napi_env env, napi_callback_info info) {
     size_t argc = 2;
@@ -414,7 +411,7 @@ napi_value f_schema2_get_column_name(napi_env env, napi_callback_info info) {
         return NULL;
     }
 
-    char name[4096] = { 0 };
+    char name[4096] = {0};
 
     schema2_get_column_name(number, column_index, name);
 
@@ -422,7 +419,6 @@ napi_value f_schema2_get_column_name(napi_env env, napi_callback_info info) {
     napi_create_string_utf8(env, name, strlen(name), &retval);
     return retval;
 }
-
 
 napi_value f_schema2_get_column_type(napi_env env, napi_callback_info info) {
     size_t argc = 2;
@@ -447,7 +443,7 @@ napi_value f_schema2_get_column_type(napi_env env, napi_callback_info info) {
         napi_throw_error(env, NULL, "Invalid number was passed as argument #2");
     }
 
-    char typename[1024] = { 0 };
+    char typename[1024] = {0};
     schema2_get_column_type(number, column_index, typename);
 
     napi_value retval;
@@ -455,8 +451,8 @@ napi_value f_schema2_get_column_type(napi_env env, napi_callback_info info) {
     return retval;
 }
 
-
-napi_value f_schema2_get_column_nullable(napi_env env, napi_callback_info info) {
+napi_value f_schema2_get_column_nullable(napi_env env,
+                                         napi_callback_info info) {
     size_t argc = 2;
 
     napi_value argv[2];
@@ -481,13 +477,13 @@ napi_value f_schema2_get_column_nullable(napi_env env, napi_callback_info info) 
         return NULL;
     }
 
-    unsigned int is_nullable = schema2_get_column_nullable(number, column_index);
+    unsigned int is_nullable =
+        schema2_get_column_nullable(number, column_index);
 
     napi_value retval;
     napi_create_int32(env, is_nullable, &retval);
     return retval;
 }
-
 
 napi_value f_schema2_add_column(napi_env env, napi_callback_info info) {
     size_t argc = 4;
@@ -506,16 +502,18 @@ napi_value f_schema2_add_column(napi_env env, napi_callback_info info) {
         napi_throw_error(env, NULL, "Invalid number was passed as argument");
     }
 
-    char name[4096] = { 0 };
+    char name[4096] = {0};
     size_t namelen = 0;
-    status = napi_get_value_string_utf8(env, argv[1], name, sizeof(name), &namelen);
+    status =
+        napi_get_value_string_utf8(env, argv[1], name, sizeof(name), &namelen);
     if (status != napi_ok) {
         napi_throw_error(env, NULL, "Invalid number was passed as argument #2");
     }
 
-    char typename[4096] = { 0 };
+    char typename[4096] = {0};
     size_t typenamelen = 0;
-    status = napi_get_value_string_utf8(env, argv[2], typename, sizeof(typename), &typenamelen);
+    status = napi_get_value_string_utf8(env, argv[2], typename,
+                                        sizeof(typename), &typenamelen);
     if (status != napi_ok) {
         napi_throw_error(env, NULL, "Invalid number was passed as argument #3");
     }
@@ -533,7 +531,6 @@ napi_value f_schema2_add_column(napi_env env, napi_callback_info info) {
     return retval;
 }
 
-
 napi_value f_writef_create(napi_env env, napi_callback_info info) {
     size_t argc = 2;
 
@@ -545,9 +542,10 @@ napi_value f_writef_create(napi_env env, napi_callback_info info) {
         napi_throw_error(env, NULL, "Failed to parse arguments");
     }
 
-    char name[4096] = { 0 };
+    char name[4096] = {0};
     size_t namelen = 0;
-    status = napi_get_value_string_utf8(env, argv[0], name, sizeof(name), &namelen);
+    status =
+        napi_get_value_string_utf8(env, argv[0], name, sizeof(name), &namelen);
     if (status != napi_ok) {
         napi_throw_error(env, NULL, "Invalid number was passed as argument #2");
     }
@@ -564,9 +562,7 @@ napi_value f_writef_create(napi_env env, napi_callback_info info) {
     napi_value retval;
     napi_create_int32(env, whandle, &retval);
     return retval;
-
 }
-
 
 napi_value f_writef_open(napi_env env, napi_callback_info info) {
     size_t argc = 1;
@@ -579,9 +575,10 @@ napi_value f_writef_open(napi_env env, napi_callback_info info) {
         napi_throw_error(env, NULL, "Failed to parse arguments");
     }
 
-    char name[4096] = { 0 };
+    char name[4096] = {0};
     size_t namelen = 0;
-    status = napi_get_value_string_utf8(env, argv[0], name, sizeof(name), &namelen);
+    status =
+        napi_get_value_string_utf8(env, argv[0], name, sizeof(name), &namelen);
     if (status != napi_ok) {
         napi_throw_error(env, NULL, "Invalid number was passed as argument #2");
     }
@@ -591,9 +588,7 @@ napi_value f_writef_open(napi_env env, napi_callback_info info) {
     napi_value retval;
     napi_create_int32(env, whandle, &retval);
     return retval;
-
 }
-
 
 napi_value f_writef_close(napi_env env, napi_callback_info info) {
     size_t argc = 1;
@@ -624,7 +619,6 @@ napi_value f_writef_close(napi_env env, napi_callback_info info) {
     return undef;
 }
 
-
 napi_value f_writef_flush(napi_env env, napi_callback_info info) {
     size_t argc = 1;
 
@@ -654,7 +648,6 @@ napi_value f_writef_flush(napi_env env, napi_callback_info info) {
     return undef;
 }
 
-
 napi_value f_writef_get_schema(napi_env env, napi_callback_info info) {
     size_t argc = 1;
 
@@ -678,7 +671,6 @@ napi_value f_writef_get_schema(napi_env env, napi_callback_info info) {
     napi_create_int32(env, s_handle, &retval);
     return retval;
 }
-
 
 napi_value f_readf_get_schema(napi_env env, napi_callback_info info) {
     size_t argc = 1;
@@ -707,7 +699,6 @@ napi_value f_readf_get_schema(napi_env env, napi_callback_info info) {
     return retval;
 }
 
-
 napi_value f_readf_open(napi_env env, napi_callback_info info) {
     size_t argc = 1;
 
@@ -719,9 +710,10 @@ napi_value f_readf_open(napi_env env, napi_callback_info info) {
         napi_throw_error(env, NULL, "Failed to parse arguments");
     }
 
-    char name[4096] = { 0 };
+    char name[4096] = {0};
     size_t namelen = 0;
-    status = napi_get_value_string_utf8(env, argv[0], name, sizeof(name), &namelen);
+    status =
+        napi_get_value_string_utf8(env, argv[0], name, sizeof(name), &namelen);
     if (status != napi_ok) {
         napi_throw_error(env, NULL, "Invalid number was passed as argument #2");
     }
@@ -731,9 +723,7 @@ napi_value f_readf_open(napi_env env, napi_callback_info info) {
     napi_value retval;
     napi_create_int32(env, rhandle, &retval);
     return retval;
-
 }
-
 
 napi_value f_readf_close(napi_env env, napi_callback_info info) {
     size_t argc = 1;
@@ -764,9 +754,7 @@ napi_value f_readf_close(napi_env env, napi_callback_info info) {
     return undef;
 }
 
-
-void readf_row_execute_callback(napi_env env, void *data)
-{
+void readf_row_execute_callback(napi_env env, void* data) {
     read_row_data_t* self = data;
     if (self->error) {
         fprintf(stderr, "Exec callback skip due to error\n");
@@ -775,13 +763,11 @@ void readf_row_execute_callback(napi_env env, void *data)
     self->result = readf_row_start(self->r_handle);
 }
 
-
-void readf_row_complete_callback(napi_env env, napi_status status, void* data)
-{
+void readf_row_complete_callback(napi_env env, napi_status status, void* data) {
     read_row_data_t* self = data;
 
     // TODO: does not work in node 10.4.0
-//    napi_delete_async_work(env, self->work);
+    //    napi_delete_async_work(env, self->work);
 
     napi_handle_scope scope;
     napi_open_handle_scope(env, &scope);
@@ -793,7 +779,8 @@ void readf_row_complete_callback(napi_env env, napi_status status, void* data)
         napi_get_reference_value(env, self->error_callback, &callback);
         value = self->error;
     } else if (self->result == 0) {
-        status = napi_get_reference_value(env, self->complete_callback, &callback);
+        status =
+            napi_get_reference_value(env, self->complete_callback, &callback);
         if (status != napi_ok) {
             fprintf(stderr, "XX\n");
         }
@@ -807,7 +794,7 @@ void readf_row_complete_callback(napi_env env, napi_status status, void* data)
         status = napi_create_array_with_length(env, sch_length, &value);
 
         for (int i = 0; i < sch_length; ++i) {
-            char typebuf[64] = { 0 };
+            char typebuf[64] = {0};
             schema2_get_column_type(sch, i, typebuf);
             bool nullable = schema2_get_column_nullable(sch, i);
 
@@ -830,21 +817,26 @@ void readf_row_complete_callback(napi_env env, napi_status status, void* data)
                 if (nullable && readf_row_is_null(self->r_handle, i)) {
                     napi_get_null(env, &element);
                 } else {
-                    unsigned long stringlen = readf_row_get_string_len(self->r_handle, i);
+                    unsigned long stringlen =
+                        readf_row_get_string_len(self->r_handle, i);
                     if (stringlen < 1024) {
-                        char buf[1024] = { 0 } ;
+                        char buf[1024] = {0};
                         unsigned long buflen = sizeof(buf);
-                        unsigned long len = readf_row_get_string(self->r_handle, i, buf, buflen);
+                        unsigned long len = readf_row_get_string(
+                            self->r_handle, i, buf, buflen);
                         assert(len < sizeof(buf));
-                        status = napi_create_string_utf8(env, buf, strlen(buf), &element);
+                        status = napi_create_string_utf8(env, buf, strlen(buf),
+                                                         &element);
                         assert(status == napi_ok);
                     } else {
                         char* buf = malloc(stringlen + 1);
                         memset(buf, 0, stringlen);
                         unsigned long buflen = stringlen;
-                        unsigned long len = readf_row_get_string(self->r_handle, i, buf, buflen);
+                        unsigned long len = readf_row_get_string(
+                            self->r_handle, i, buf, buflen);
                         assert(len == buflen);
-                        status = napi_create_string_utf8(env, buf, strlen(buf), &element);
+                        status = napi_create_string_utf8(env, buf, strlen(buf),
+                                                         &element);
                         assert(status == napi_ok);
                     }
                 }
@@ -876,7 +868,6 @@ void readf_row_complete_callback(napi_env env, napi_status status, void* data)
     free(self);
 }
 
-
 napi_value f_readf_row(napi_env env, napi_callback_info info) {
     size_t argc = 4;
 
@@ -894,7 +885,9 @@ napi_value f_readf_row(napi_env env, napi_callback_info info) {
 
     status = napi_get_value_int32(env, argv[0], &self->r_handle);
     if (status != napi_ok) {
-        napi_create_error2(env, "Invalid number was passed as argument (handle)", &self->error);
+        napi_create_error2(env,
+                           "Invalid number was passed as argument (handle)",
+                           &self->error);
         free(self);
         self = NULL;
         return NULL;
@@ -920,20 +913,16 @@ napi_value f_readf_row(napi_env env, napi_callback_info info) {
         return NULL;
     }
 
-
-    status = napi_create_string_utf8(env, "readf_row", -1, &(self->async_resource_name));
+    status = napi_create_string_utf8(env, "readf_row", -1,
+                                     &(self->async_resource_name));
     if (status != napi_ok) {
         napi_throw_error(env, NULL, "failed to create resource name");
         return NULL;
     }
 
-    status = napi_create_async_work(env,
-                           NULL,
-                           self->async_resource_name,
-                           readf_row_execute_callback,
-                           readf_row_complete_callback,
-                           self,
-                           &(self->work));
+    status = napi_create_async_work(
+        env, NULL, self->async_resource_name, readf_row_execute_callback,
+        readf_row_complete_callback, self, &(self->work));
 
     if (status != napi_ok) {
         napi_throw_error(env, NULL, "napi_create_async_work failed");
@@ -959,31 +948,29 @@ struct {
     char const* name;
     napi_callback cb;
 } functions[] = {
-    { "schema2_create", f_schema2_create },
-    { "schema2_destroy", f_schema2_destroy },
-    { "schema2_len", f_schema2_len },
-    { "schema2_add_column", f_schema2_add_column },
-    { "schema2_get_column_name", f_schema2_get_column_name },
-    { "schema2_get_column_type", f_schema2_get_column_type },
-    { "schema2_get_column_nullable", f_schema2_get_column_nullable },
+    {"schema2_create", f_schema2_create},
+    {"schema2_destroy", f_schema2_destroy},
+    {"schema2_len", f_schema2_len},
+    {"schema2_add_column", f_schema2_add_column},
+    {"schema2_get_column_name", f_schema2_get_column_name},
+    {"schema2_get_column_type", f_schema2_get_column_type},
+    {"schema2_get_column_nullable", f_schema2_get_column_nullable},
 
-    { "readf_open", f_readf_open },
-    { "readf_close", f_readf_close },
-    { "readf_get_schema", f_readf_get_schema },
-    { "readf_row", f_readf_row },
+    {"readf_open", f_readf_open},
+    {"readf_close", f_readf_close},
+    {"readf_get_schema", f_readf_get_schema},
+    {"readf_row", f_readf_row},
 
-    { "writef_create", f_writef_create },
-    { "writef_open", f_writef_open },
-    { "writef_row", f_writef_row },
-    { "writef_close", f_writef_close },
-    { "writef_flush", f_writef_flush },
-    { "writef_get_schema", f_writef_get_schema },
+    {"writef_create", f_writef_create},
+    {"writef_open", f_writef_open},
+    {"writef_row", f_writef_row},
+    {"writef_close", f_writef_close},
+    {"writef_flush", f_writef_flush},
+    {"writef_get_schema", f_writef_get_schema},
 };
 
-
 napi_value Init(napi_env env, napi_value exports) {
-
-    for (size_t i = 0; i < sizeof(functions) / sizeof(*functions) ; ++i) {
+    for (size_t i = 0; i < sizeof(functions) / sizeof(*functions); ++i) {
         napi_status status;
         napi_value fn;
 
@@ -1002,6 +989,5 @@ napi_value Init(napi_env env, napi_value exports) {
 
     return exports;
 }
-
 
 NAPI_MODULE(NODE_GYP_MODULE_NAME, Init)
