@@ -120,7 +120,8 @@ void writef_row_complete_callback(napi_env env, napi_status status,
     free(self);
 
     // TODO: does not work in node 10.4.0
-    //    napi_delete_async_work(env, self->work);
+    napi_delete_async_work(env, self->work);
+    self->work = NULL;
 }
 
 napi_value f_writef_row(napi_env env, napi_callback_info info) {
