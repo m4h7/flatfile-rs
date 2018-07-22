@@ -349,7 +349,7 @@ pub extern fn readf_row_get_u64(fhandle: c_uint, index: c_uint) -> c_ulong {
     let uindex = index as usize;
     match rf.current[uindex] {
         ColumnValue::U64 { v } => v,
-        _ => panic!("column type not u64")
+        _ => panic!("column type not u64 but {:?}", rf.current[uindex])
     }
 }
 
