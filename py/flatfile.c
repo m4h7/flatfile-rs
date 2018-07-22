@@ -143,7 +143,7 @@ flatfile_readf_row_start(PyObject* self, PyObject* args) {
         return NULL;
     }
     unsigned int r = readf_row_start(fhandle);
-    return PyLong_FromLong(r);
+    return PyLong_FromUnsignedLong(r);
 }
 
 static PyObject*

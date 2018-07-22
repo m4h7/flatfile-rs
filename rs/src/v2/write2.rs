@@ -275,7 +275,8 @@ pub fn schema_read_row<B: ReadBuf>(
     schema: &Schema2,
 ) -> bool {
     // read null bytes
-    let aligned_len = schema.len() + (8 - (schema.len() % 8));
+    let modulo = schema.len() % 8;
+    let aligned_len = schema.len() + if modulo > 0 { 8 - modulo } else { 0 };
     for i in 0..(aligned_len/8) {
         let hash = {
             // start checksum
@@ -310,7 +311,7 @@ pub fn schema_read_row<B: ReadBuf>(
                                 }
                                 None => {
                                     values[i * 8 + j] = ColumnValue::Null;
-                                    return false;
+//                                    return false; TODO: why?
                                 }
                             }
                         },

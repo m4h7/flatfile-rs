@@ -11,7 +11,7 @@ class Reader:
     def fetch_columns(self, columns):
         while True:
             row = self.read_columns(columns)
-            if row:
+            if row is not None:
                 yield row
             else:
                 break
@@ -19,7 +19,7 @@ class Reader:
     def fetch(self):
         while True:
             row = self.read_row()
-            if row:
+            if row is not None:
                 yield row
             else:
                 break

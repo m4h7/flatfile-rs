@@ -31,9 +31,12 @@ def read_row(rh, types):
     return None
 
 
+counter = 1
 while True:
     r = read_row(rh, types)
     if r is not None:
+        counter += 1
         print(r)
     else:
         break
+print ("Number of rows", counter)
