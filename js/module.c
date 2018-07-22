@@ -807,14 +807,31 @@ void readf_row_complete_callback(napi_env env, napi_status status, void* data)
                     napi_create_uint32(env, v, &element);
                 }
             } else if (!strcmp(typebuf, "u64")) {
-                // TODO: null check
-                int v = readf_row_get_u64(self->r_handle, i);
-                napi_create_int64(env, v, &element);
+                if (nullable && readf_row_is_null(self->r_handle, i)) {
+                    napi_get_null(env, &element);
+                } else {
+                    int v = readf_row_get_u64(self->r_handle, i);
+                    napi_create_int64(env, v, &element);
+                }
             } else if (!strcmp(typebuf, "string")) {
-                // TODO: null check
-                char valuebuf[4096] = { 0 };
-                readf_row_get_string(self->r_handle, i, &valuebuf, sizeof(valuebuf));
-                napi_create_string_utf8(env, valuebuf, strlen(valuebuf), &element);
+                if (nullable && readf_row_is_null(self->r_handle, i)) {
+                    napi_get_null(env, &element);
+                } else {
+                    unsigned long stringlen = readf_row_get_string_len(self->r_handle, i);
+                    if (stringlen < 1024) {
+                        char buf[1024] = { 0 } ;
+                        unsigned long buflen = sizeof(buf);
+                        unsigned long len = readf_row_get_string(self->r_handle, i, buf, buflen);
+                        napi_create_string_utf8(env, buf, strlen(buf), &element);
+                    } else {
+                        char* buf = malloc(stringlen + 1);
+                        memset(buf, 0, stringlen);
+                        unsigned long buflen = stringlen;
+                        unsigned long len = readf_row_get_string(self->r_handle, i, buf, buflen);
+                        assert(len == buflen);
+                        napi_create_string_utf8(env, buf, strlen(buf), &element);
+                    }
+                }
             }
             status = napi_set_element(env, value, i, element);
         }
