@@ -73,38 +73,51 @@ void writef_row_complete_callback(napi_env env, napi_status status, void* data)
     write_row_data_t* self = data;
 
     napi_handle_scope scope;
-    napi_open_handle_scope(env, &scope);
+    status = napi_open_handle_scope(env, &scope);
+    assert(status == napi_ok);
 
     napi_value ctx;
     if (self->ctx) {
-        napi_get_reference_value(env, self->ctx, &ctx);
+        status = napi_get_reference_value(env, self->ctx, &ctx);
+        assert(status == napi_ok);
     } else {
         napi_get_null(env, &ctx);
     }
 
     napi_value callback;
-    napi_get_reference_value(env, self->callback, &callback);
+    status = napi_get_reference_value(env, self->callback, &callback);
+    assert(status == napi_ok);
 
     napi_value argv[2];
+    napi_value error;
 
     if (self->error == NULL) {
-        status = napi_get_null(env, &self->error);
+        status = napi_get_null(env, &error);
+    } else {
+        error = self->error;
     }
 
-    argv[0] = self->error;
-    napi_create_uint32(env, 123, &(argv[1]));
+    argv[0] = error;
+
+    status = napi_create_uint32(env, 123, &(argv[1]));
+    assert(status == napi_ok);
 
     napi_call_function(env, ctx, callback, 2, argv, NULL);
-    napi_close_handle_scope(env, scope);
 
+    status = napi_close_handle_scope(env, scope);
+    assert(status == napi_ok);
+
+    // delete callback reference
     status = napi_delete_reference(env, self->callback);
     assert(status == napi_ok);
     self->callback = NULL;
 
+    // delete array reference
     status = napi_delete_reference(env, self->array);
     assert(status == napi_ok);
     self->array = NULL;
 
+    // delete ctx reference if set
     if (self->ctx) {
         status = napi_delete_reference(env, self->ctx);
         assert(status == napi_ok);
@@ -795,10 +808,10 @@ void readf_row_complete_callback(napi_env env, napi_status status, void* data)
 
         for (int i = 0; i < sch_length; ++i) {
             char typebuf[64] = { 0 };
-            schema2_get_column_type(sch, i, &typebuf);
+            schema2_get_column_type(sch, i, typebuf);
             bool nullable = schema2_get_column_nullable(sch, i);
 
-            napi_value element;
+            napi_value element = NULL;
             if (!strcmp(typebuf, "u32")) {
                 if (nullable && readf_row_is_null(self->r_handle, i)) {
                     napi_get_null(env, &element);
@@ -822,18 +835,22 @@ void readf_row_complete_callback(napi_env env, napi_status status, void* data)
                         char buf[1024] = { 0 } ;
                         unsigned long buflen = sizeof(buf);
                         unsigned long len = readf_row_get_string(self->r_handle, i, buf, buflen);
-                        napi_create_string_utf8(env, buf, strlen(buf), &element);
+                        assert(len < sizeof(buf));
+                        status = napi_create_string_utf8(env, buf, strlen(buf), &element);
+                        assert(status == napi_ok);
                     } else {
                         char* buf = malloc(stringlen + 1);
                         memset(buf, 0, stringlen);
                         unsigned long buflen = stringlen;
                         unsigned long len = readf_row_get_string(self->r_handle, i, buf, buflen);
                         assert(len == buflen);
-                        napi_create_string_utf8(env, buf, strlen(buf), &element);
+                        status = napi_create_string_utf8(env, buf, strlen(buf), &element);
+                        assert(status == napi_ok);
                     }
                 }
             }
             status = napi_set_element(env, value, i, element);
+            assert(status == napi_ok);
         }
     }
 
@@ -843,7 +860,7 @@ void readf_row_complete_callback(napi_env env, napi_status status, void* data)
     napi_value ctx;
     status = napi_get_null(env, &ctx);
 
-    status = napi_call_function(env, ctx, callback, 1, &args, NULL);
+    status = napi_call_function(env, ctx, callback, 1, args, NULL);
     if (status != napi_ok) {
         napi_throw_error(env, NULL, "Failed to call callback");
     }

@@ -44,5 +44,16 @@ void writef_row_set_u32(
 void writef_row_set_u64(unsigned int handle, unsigned int index, unsigned long value);
 void writef_row_set_string(unsigned int handle, unsigned int index, char const* s);
 bool writef_row_end(unsigned int handle);
+void writef_flush(unsigned int handle);
+
+unsigned long readf_row_get_string_len(unsigned int fhandle, unsigned int index);
+unsigned long readf_row_get_string(unsigned int fhandle, unsigned int index, void* out, unsigned long size);
+unsigned long readf_row_get_u64(unsigned int fhandle, unsigned int index);
+unsigned int readf_row_get_u32(unsigned int fhandle, unsigned int index);
+unsigned int readf_row_is_null(unsigned int fhandle, unsigned int index);
+unsigned int readf_row_start(unsigned int fhandle);
+void readf_close(unsigned int fhandle);
+unsigned int readf_open(char const* name);
+unsigned int readf_clone_schema(unsigned int fhandle);
 
 #endif // FLATFILE_H_INCLUDED
