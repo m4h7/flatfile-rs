@@ -9,8 +9,21 @@ flatfile_schema2_create(PyObject *self, PyObject *args)
 }
 
 static PyObject *
-flatfile_schema2_destroy(PyObject *self, PyObject *args)
+flatfile_schema2_destroy(PyObject *_self, PyObject *args)
 {
+    unsigned int handle = 0;
+
+    if (!PyArg_ParseTuple(args, "i", &handle)) {
+        return NULL;
+    }
+
+    schema2_destroy(handle);
+
+    Py_INCREF(Py_None);
+    PyObject* ret = Py_None;
+    assert(! PyErr_Occurred());
+    assert(ret);
+    return ret;
 }
 
 static PyObject *
@@ -55,7 +68,7 @@ flatfile_schema2_get_column_name(PyObject *self, PyObject *args)
         return NULL;
     }
     char buf[1024] = { 0 };
-    schema2_get_column_name(handle, index, &buf);
+    schema2_get_column_name(handle, index, buf);
     return PyUnicode_FromString(buf);
 }
 
@@ -68,7 +81,7 @@ flatfile_schema2_get_column_type(PyObject *self, PyObject *args)
         return NULL;
     }
     char buf[1024] = { 0 };
-    schema2_get_column_type(handle, index, &buf);
+    schema2_get_column_type(handle, index, buf);
     return PyUnicode_FromString(buf);
 }
 
@@ -108,22 +121,31 @@ flatfile_writef_create(PyObject* self, PyObject* args) {
 static PyObject*
 flatfile_writef_open(PyObject* self, PyObject* args) {
     char const* name = NULL;
-    unsigned int schandle = 0;
+
     if (!PyArg_ParseTuple(args, "s", &name)) {
         return NULL;
     }
+
     unsigned int fhandle = writef_open(name);
+
     return PyLong_FromLong(fhandle);
 }
 
 static PyObject*
 flatfile_readf_close(PyObject* self, PyObject* args) {
     unsigned int fhandle = 0;
+
     if (!PyArg_ParseTuple(args, "I", &fhandle)) {
         return NULL;
     }
+
     readf_close(fhandle);
-    return PyLong_FromLong(0);
+
+    Py_INCREF(Py_None);
+    PyObject* ret = Py_None;
+    assert(! PyErr_Occurred());
+    assert(ret);
+    return ret;
 }
 
 static PyObject*
@@ -163,7 +185,12 @@ flatfile_readf_row_end(PyObject* self, PyObject* args) {
         return NULL;
     }
     readf_row_end(fhandle);
-    return PyLong_FromLong(0);
+
+    Py_INCREF(Py_None);
+    PyObject* ret = Py_None;
+    assert(! PyErr_Occurred());
+    assert(ret);
+    return ret;
 }
 
 static PyObject*
@@ -262,8 +289,14 @@ flatfile_writef_row_set_u32(PyObject* self, PyObject* args) {
     if (!PyArg_ParseTuple(args, "IIk", &fhandle, &index, &value)) {
         return NULL;
     }
+
     writef_row_set_u32(fhandle, index, value);
-    return PyLong_FromLong(0);
+
+    Py_INCREF(Py_None);
+    PyObject* ret = Py_None;
+    assert(! PyErr_Occurred());
+    assert(ret);
+    return ret;
 }
 
 static PyObject*
@@ -274,8 +307,14 @@ flatfile_writef_row_set_u64(PyObject* self, PyObject* args) {
     if (!PyArg_ParseTuple(args, "IIK", &fhandle, &index, &value)) {
         return NULL;
     }
+
     writef_row_set_u64(fhandle, index, value);
-    return PyLong_FromLong(0); // TODO None
+
+    Py_INCREF(Py_None);
+    PyObject* ret = Py_None;
+    assert(! PyErr_Occurred());
+    assert(ret);
+    return ret;
 }
 
 static PyObject*
@@ -286,8 +325,14 @@ flatfile_writef_row_set_string(PyObject* self, PyObject* args) {
     if (!PyArg_ParseTuple(args, "IIs", &fhandle, &index, &value)) {
         return NULL;
     }
+
     writef_row_set_string(fhandle, index, value);
-    return PyLong_FromLong(0);
+
+    Py_INCREF(Py_None);
+    PyObject* ret = Py_None;
+    assert(! PyErr_Occurred());
+    assert(ret);
+    return ret;
 }
 
 static PyMethodDef SpamMethods[] = {
@@ -329,7 +374,11 @@ static struct PyModuleDef flatfilemodule = {
     NULL, /* module documentation, may be NULL */
     -1,       /* size of per-interpreter state of the module,
                  or -1 if the module keeps state in global variables. */
-    SpamMethods
+    SpamMethods,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
 };
 
 PyMODINIT_FUNC
