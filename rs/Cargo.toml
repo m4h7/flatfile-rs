@@ -4,6 +4,7 @@ version = "0.1.1"
 authors = ["mhg <mhg@urml.eu>"]
 
 [dependencies]
+zstd = "*"
 lz4 = "*"
 brotli2 = "*"
 adler32 = "*"

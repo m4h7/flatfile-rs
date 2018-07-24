@@ -11,6 +11,7 @@ use v2::filebuf::{FileBuf, ReadFileBuf};
 use v2::vecbuf::Vecbuf;
 
 extern crate lz4;
+extern crate zstd;
 
 fn read_varint<B: ReadBuf>(b: &mut B) -> usize {
     let mut bits: usize = 0;
@@ -55,6 +56,20 @@ fn read_varstring<B: ReadBuf>(b: &mut B) -> Option<String> {
         // convert bytes to string
         let s = str::from_utf8(bytes.as_slice()).unwrap();
         Some(s.to_string()) // TBD
+    } else if co == 'Z' as u8 {
+        let size = read_varint(b);
+        let mut bytes = Vec::new();
+        for i in 0..size {
+            let byte = read_db(b);
+            bytes.push(byte);
+        }
+        let mut d = zstd::Decoder::new(bytes.as_slice()).unwrap();
+        let mut dbuf: Vec<u8> = Vec::new();
+        let r = d.read_to_end(&mut dbuf);
+        r.unwrap();
+        d.finish();
+        let s = str::from_utf8(&dbuf).unwrap();
+        Some(s.to_string())
     } else if co == 'L' as u8 {
         let size = read_varint(b);
 //        if !check(b, size) {
@@ -79,21 +94,35 @@ fn read_varstring<B: ReadBuf>(b: &mut B) -> Option<String> {
 
 // write variable sized string
 fn write_varstring<B: AppendBuf>(b: &mut B, s: &str) {
-    // try compressing
     let buf = Vec::new();
-    let mut co = lz4::EncoderBuilder::new()
-        .checksum(lz4::ContentChecksum::NoChecksum)
-        .block_size(lz4::BlockSize::Default)
-        .block_mode(lz4::BlockMode::Linked)
-        .build(buf)
-        .unwrap();
-    let wres = co.write(s.as_bytes());
-    wres.expect("co.write");
-    let (outbuf, fres) = co.finish();
-    fres.expect("co.finish");
+    let mut compression = 0 as u8;
+
+    // try compressing the string
+    let outbuf = if s.len() < 4096 { // use lz4
+        let mut co = lz4::EncoderBuilder::new()
+            .checksum(lz4::ContentChecksum::NoChecksum)
+            .block_size(lz4::BlockSize::Default)
+            .block_mode(lz4::BlockMode::Linked)
+            .build(buf)
+            .unwrap();
+        let wres = co.write(s.as_bytes());
+        wres.expect("co.write");
+        let (outbuf, fres) = co.finish();
+        fres.expect("co.finish");
+        compression = 'L' as u8;
+        outbuf
+    } else { // use zstd
+        let level = 5;
+        let mut encoder = zstd::stream::Encoder::new(buf, level).unwrap();
+        let wres = encoder.write(s.as_bytes());
+        wres.expect("zstd.write");
+        let outbuf = encoder.finish().unwrap();
+        compression = 'Z' as u8;
+        outbuf
+    };
 
     if outbuf.len() < s.as_bytes().len() {
-        write_db(b, 'L' as u8); // lz4 mark
+        write_db(b, compression); // lz4/zstd mark
         write_varint(b, outbuf.len());
         for c in outbuf.as_slice() {
             write_db(b, *c);
@@ -540,7 +569,8 @@ fn test_schema_write() {
 
 #[test]
 fn test_string_rw() {
-    for n in 1..1000 {
+    let mut n = 1;
+    while n <= 8192 {
         let x = (0..n).map(|_| "X").collect::<String>();
         let y = (0..n).map(|_| "Y").collect::<String>();
         {
@@ -557,5 +587,6 @@ fn test_string_rw() {
             assert!(rx == x);
             assert!(ry == y);
         }
+        n += 1024;
     }
 }
