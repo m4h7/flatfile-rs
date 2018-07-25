@@ -7,3 +7,4 @@ pub use types::{ColumnType, ColumnValue, Relation};
 pub use v2::mmapbuf::MmapBuf;
 pub use v2::write2::{read_schema_v2, schema_read_row, write_schema_v2, schema_write};
 pub use v2::filebuf::{FileBuf, ReadFileBuf};
+pub use v2::rel::{FileRelation, create_relation};

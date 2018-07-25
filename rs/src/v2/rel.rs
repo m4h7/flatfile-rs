@@ -5,11 +5,15 @@ use v2::write2::{read_schema_v2, schema_read_row};
 use v2::ast::{Expr, eval, Value};
 
 use std::collections::HashMap;
-use std::fs::File;
+use std::fs::{File, read_dir};
 use std::io::Result;
 //use std::rc::Rc;
 //use std::cell::RefCell;
 use std::borrow::Borrow;
+use std::borrow::BorrowMut;
+
+extern crate regex;
+use self::regex::Regex;
 
 pub struct EmptyRelation {
 }
@@ -258,33 +262,22 @@ impl<'a, 'r> Relation<'r> for ConcatRelation<'a> {
     }
 }
 
-struct Rels<'a> {
-    namemap: HashMap<String, Box<Relation<'a>>>,
-}
-
-impl<'a> Rels<'a> {
-    fn new() -> Rels<'a> {
-        Rels { namemap: HashMap::new() }
-    }
-    fn add(&mut self, name: String, rel: Box<Relation<'a>>) {
-        self.namemap.insert(name, rel);
-    }
-}
-
 struct ParseError {
 }
 
 const space: u8 = ' ' as u8;
 const tab: u8 = '\t' as u8;
-const cr: u8 = '\r' as u8;
-const lf: u8 = '\n' as u8;
-const dquote: u8 = '"' as u8;
-const lbrace: u8 = '{' as u8;
-const rbrace: u8 = '}' as u8;
+const CR: u8 = '\r' as u8;
+const LF: u8 = '\n' as u8;
+const DQUOTE: u8 = '"' as u8;
+const LBRACE: u8 = '{' as u8;
+const RBRACE: u8 = '}' as u8;
+const RE: u8 = '/' as u8;
 
 fn expect(s: &[u8], s2: &str, i: usize) -> usize {
     let mut j = i;
     let u = s2.as_bytes();
+    // skip SPACE and TAB
     while j < s.len() && (s[j] == space || s[j] == tab) {
         j += 1;
     }
@@ -302,30 +295,40 @@ fn expect(s: &[u8], s2: &str, i: usize) -> usize {
 
 fn parse_token(s: &[u8], i: usize) -> (String, usize) {
     let mut j = i;
+    // do not skip CR LF
     while j < s.len() && (s[j] == space || s[j] == tab) {
         j += 1;
     }
     let mut k = j;
-    if k < s.len() && s[k] == dquote { // quoted text
+    if k < s.len() && s[k] == DQUOTE { // quoted text
         k += 1;
-        while k < s.len() && s[k] != dquote {
+        while k < s.len() && s[k] != DQUOTE {
             k += 1;
         }
-        if k < s.len() && s[k] == dquote {
+        if k < s.len() && s[k] == DQUOTE {
             k += 1;
         }
         // signal an error on CRLF/EOF ?
-    } else if k < s.len() && s[k] == lbrace { // { braces }
-        while k < s.len() && s[k] != rbrace {
+    } else if k < s.len() && s[k] == RE { // quoted text
+        k += 1;
+        while k < s.len() && s[k] != RE {
             k += 1;
         }
-        if k < s.len() && s[k] == rbrace {
+        if k < s.len() && s[k] == RE {
+            k += 1;
+        }
+        // signal an error on CRLF/EOF ?
+    } else if k < s.len() && s[k] == LBRACE { // { braces }
+        while k < s.len() && s[k] != RBRACE {
+            k += 1;
+        }
+        if k < s.len() && s[k] == RBRACE {
             k += 1;
         }
         // signal an error on CRLF/EOF ?
     } else {
         // standard token
-        while k < s.len() && s[k] != space && s[k] != tab && s[k] != cr && s[k] != lf {
+        while k < s.len() && s[k] != space && s[k] != tab {
             k += 1;
         }
     }
@@ -338,59 +341,164 @@ fn parse_token(s: &[u8], i: usize) -> (String, usize) {
 // a = file "name"
 // b = project a cid bid xid
 // c = rename b cid -> id bix -> ix
-// d = restrict c {id > 3 && id < 6}
-// e = dedup d [col1] [col2] {cond1} {cond2} {cond3}
+// d = restrict c (id > 3 && id < 6)
+// e = dedup d [col1] [col2] (cond1) (cond2) (cond3)
 // f = diff a b  # items in 'a' that are not in 'b'
 // f = diff a.id b.id
-// g = union a b # a and b must have same schema
 // i = sort h.xid asc
 // j = inner_join h.id j.id # intersection
 // k = left_join h.id j.id # j will have schema with nulls
-// l = outer_join
-// x = file_union "*.glob" "*.glob2"
+// l = full_outer_join
+// x = union "*.glob" "*.glob2" otherrel file_{variable}.ext
 //
-fn parse_relalg(s: &[u8]) -> Option<Rels> { // Result
+
+
+#[derive(Debug)]
+struct Rels {
+    namemap: HashMap<String, RelationParam>,
+}
+
+impl Rels {
+    fn new() -> Rels {
+        Rels { namemap: HashMap::new() }
+    }
+    fn add(&mut self, name: String, rel: RelationParam) {
+        self.namemap.insert(name, rel);
+    }
+    fn get(&self, name: &str) -> Option<&RelationParam> {
+        self.namemap.get(name)
+    }
+}
+#[derive(Debug)]
+enum RelationParam {
+    File { filename: String },
+    Union { relations: Vec<String> },
+}
+
+fn parse_relalgs(s: &[u8]) -> Option<Rels> { // Result
     let mut r = Rels::new();
+    let mut pos = 0;
 
-    let (name, i) = parse_token(s, 0);
-    let j = expect(s, "=", i);
-    let (reltype, k) = parse_token(s, j);
-    match reltype.as_str() {
-        "file" => {
-            let (filename, l) = parse_token(s, k);
-            let m = expect(s, "\n", l);
-            if m == l {
-                println!("expecting eol after filename in 'file'");
-                return None;
-            }
-            let fr = FileRelation::new(filename.as_str()).unwrap();
-            r.add(name, Box::new(fr));
-        },
-        "file_union" => {
-            let mut co = ConcatRelation::new();
-            let mut start = k;
-            loop {
-                let (filename, l) = parse_token(s, start);
-
-                let fr = FileRelation::new(filename.as_str()).unwrap();
-                co.add(Box::new(fr));
-
+    loop {
+        let (name, i) = parse_token(s, pos);
+        println!("parse_token={}", name);
+        if i == pos { // EOS
+            break;
+        }
+        let j = expect(s, "=", i);
+        let (reltype, k) = parse_token(s, j);
+        match reltype.as_str() {
+            "file" => {
+                let (filename, l) = parse_token(s, k);
                 let m = expect(s, "\n", l);
-                if m != l {
-                    break;
-                } else {
-                    start = m;
+                if m == l {
+                    println!("expecting eol after filename in 'file'");
+                    return None;
                 }
+                let fr = RelationParam::File { filename: filename }; // FileRelation::new(filename.as_str()).unwrap();
+                r.add(name, fr);
+                pos = m;
+            },
+            "union" => {
+                let mut relations = Vec::<String>::new(); // ConcatRelation::new();
+                let mut start = k;
+                loop {
+                    let (relname, l) = parse_token(s, start);
+                    if l != start {
+                        println!("relname = {}", relname);
+                        relations.push(relname);
+                    } else {
+                        // EOF
+                        start = l;
+                        break;
+                    }
+
+                    let m = expect(s, "\n", l);
+                    start = m; // move past eol
+                    if m != l { // found EOL?
+                        break;
+                    }
+                }
+                let u = RelationParam::Union { relations: relations };
+                r.add(name, u);
+                pos = start;
+            },
+            _ => {
+                println!("unknown rel {}", reltype);
             }
-            r.add(name, Box::new(co));
-        },
-        _ => {
-            println!("unknown rel {}", reltype);
         }
     }
 
     Some(r)
 }
+
+fn resolve_relation<'a>(name: &str, r: &Rels, variables: &HashMap<String, String>) -> Option<Box<Relation<'a>>> {
+    if let Some(top) = r.get(name) {
+        match top {
+            RelationParam::File { filename } => {
+                let fr = FileRelation::new(&filename).unwrap();
+                let r : Box<Relation<'a>> = Box::new(fr);
+                let result = Some(r);
+                result
+            },
+            RelationParam::Union { relations } => {
+                let mut co = ConcatRelation::new();
+                for relation in relations {
+                    let v: Vec<char> = relation.chars().collect();
+                    let first = v[0];
+                    let last = v[v.len() - 1];
+                    if first == '"' && last == '"' { // filename
+                        let fr = FileRelation::new(&relation[1..v.len()-2]).unwrap();
+                        let r : Box<Relation> = Box::new(fr);
+                        co.add(r);
+                    } else if first == '\'' && last == '\'' { // regex over filenames
+                        let unquoted = &relation[1..v.len()-1];
+
+                        let (dir, regexp) = if let Some(index) = unquoted.rfind('/') {
+                            let d = &unquoted[..index];
+                            let r = &unquoted[index+1..];
+                            (d, r)
+                        } else { // no path component
+                            (".", unquoted)
+                        };
+
+                        let re = Regex::new(regexp).unwrap();
+
+                        for entry in read_dir(dir).unwrap() {
+                            if let Ok(e) = entry {
+                                let name = e.file_name();
+                                match name.into_string() {
+                                    Ok(s) => {
+                                        if re.is_match(&s) {
+                                            let fr = FileRelation::new(e.path().to_str().unwrap()).unwrap();
+                                            let r: Box<Relation> = Box::new(fr);
+                                            co.add(r);
+                                        }
+                                    },
+                                    Err(os) => {
+                                        println!("read_dir string not valid unicode {:?}", os);
+                                    },
+                                };
+                            } else {
+                                println!("read_dir fail {:?}", entry);
+                            }
+                        }
+                    } else { // name of some other rel
+                    }
+                }
+                Some(Box::new(co))
+            },
+        }
+    } else {
+        None
+    }
+}
+
+pub fn create_relation<'a>(name: &str, rel: &str, variables: &HashMap<String, String>) -> Option<Box<Relation<'a>>> {
+    let rels = parse_relalgs(rel.as_bytes()).unwrap();
+    resolve_relation(name, &rels, &variables)
+}
+
 
 #[test]
 fn test_parsing() {
@@ -406,6 +514,27 @@ fn test_parsing() {
     assert!(t2 == "world");
     assert!(t3 == "{b r a c e}");
     assert!(t4 == "\"q u o t {e} d\"");
+}
+
+#[test]
+fn test_union() {
+    let rel = "a = file \"/tmp/_test1.dat\"\nb = union '/tmp/_test[1-2].dat'";
+    let rels = parse_relalgs(rel.as_bytes()).unwrap();
+    let variables = HashMap::new();
+
+    let mut rr : Box<Relation> = resolve_relation("b", &rels, &variables).unwrap();
+    let len = rr.length();
+    while true {
+        let r: &mut Relation = rr.borrow_mut();
+        let done = r.read();
+        println!("union: read done {}", done);
+        if done {
+            break;
+        }
+        for i in 0..len {
+            println!("union: val {} is {:?}", i, r.value(i));
+        }
+    }
 }
 
 #[test]
