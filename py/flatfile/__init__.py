@@ -2,11 +2,12 @@ import _flatfile
 import os.path
 
 class Reader:
-    def __init__(self, filename, schema = None):
+    def __init__(self, filename, schema = None, reldef = None):
         self.filename = filename
         self.schema = schema
         self.h = None
         self.sch = None
+        self.reldef = reldef
 
     def fetch_columns(self, columns):
         while True:
@@ -91,16 +92,27 @@ class Reader:
         raise Exception("schema different")
 
     def __enter__(self):
-        self.h = _flatfile.readf_open(self.filename)
+        if self.reldef is not None:
+            self.h = _flatfile.readf_open_relation(self.filename, self.reldef)
+        else:
+            self.h = _flatfile.readf_open(self.filename)
+        if self.h == -1:
+            self.h = None
+            raise Exception("unable to open file/relation {}".format(self.filename))
+
         self.sch = _flatfile.readf_clone_schema(self.h)
+
         schema = []
-        for n in range(0, _flatfile.schema2_len(self.sch)):
+        schemalen = _flatfile.schema2_len(self.sch)
+
+        for n in range(0, schemalen):
             item = [
                 _flatfile.schema2_get_column_name(self.sch, n),
                 _flatfile.schema2_get_column_type(self.sch, n),
                 _flatfile.schema2_get_column_nullable(self.sch, n),
             ]
             schema.append(item)
+
         if self.schema is not None:  # compare
             if len(self.schema) != len(schema):
                 self.schema_error(self.schema, schema, "length")
@@ -116,7 +128,8 @@ class Reader:
         return self
 
     def __exit__(self, *args):
-        _flatfile.readf_close(self.h)
+        if self.h is not None:
+            _flatfile.readf_close(self.h)
         self.h = None
 
 

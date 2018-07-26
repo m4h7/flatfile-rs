@@ -103,7 +103,18 @@ flatfile_readf_open(PyObject* self, PyObject* args) {
     if (!PyArg_ParseTuple(args, "s", &name)) {
         return NULL;
     }
-    unsigned int fhandle = readf_open(name);
+    long fhandle = readf_open(name);
+    return PyLong_FromLong(fhandle);
+}
+
+static PyObject*
+flatfile_readf_open_relation(PyObject* self, PyObject* args) {
+    char const* name = NULL;
+    char const* def = NULL;
+    if (!PyArg_ParseTuple(args, "ss", &name, &def)) {
+        return NULL;
+    }
+    long fhandle = readf_open_relation(name, def);
     return PyLong_FromLong(fhandle);
 }
 
@@ -365,6 +376,7 @@ static PyMethodDef SpamMethods[] = {
     {"readf_row_get_string", flatfile_readf_row_get_string, METH_VARARGS, "readf_row_get_string_doc"},
 
     {"readf_clone_schema", flatfile_readf_clone_schema, METH_VARARGS, "readf_clone_schema_doc"},
+    {"readf_open_relation", flatfile_readf_open_relation, METH_VARARGS, "readf_open_relation_doc"},
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 
