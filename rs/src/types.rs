@@ -44,7 +44,7 @@ pub struct Column {
     pub nullable: bool, // TBD
 }
 
-pub trait Relation<'r> {
+pub trait Relation {
     fn length(&self) -> usize;
     fn read(&mut self) -> bool;
     fn name(&self, n: usize) -> String;

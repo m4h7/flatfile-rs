@@ -18,7 +18,7 @@ use self::regex::Regex;
 pub struct EmptyRelation {
 }
 
-impl<'r> Relation<'r> for EmptyRelation {
+impl Relation for EmptyRelation {
     fn length(&self) -> usize {
       0
     }
@@ -47,19 +47,23 @@ pub struct FileRelation {
     done: bool,
 }
 
-impl<'r> Relation<'r> for FileRelation {
+impl Relation for FileRelation {
     fn length(&self) -> usize {
         self.schema.len()
     }
     fn read(&mut self) -> bool {
 
-        self.done = !schema_read_row(
+        let success = schema_read_row(
             &mut self.m,
             self.current.as_mut_slice(),
             &self.schema
         );
 
-        self.done
+        if !success {
+            self.done = true;
+        }
+
+        success
     }
     fn name(&self, n: usize) -> String {
         self.schema.name(n).to_owned()
@@ -71,6 +75,7 @@ impl<'r> Relation<'r> for FileRelation {
         self.schema.nullable(n)
     }
     fn value(&self, n: usize) -> &ColumnValue {
+        assert!(self.done == false);
         self.current[n].borrow()
     }
 }
@@ -100,15 +105,15 @@ impl FileRelation {
     }
 }
 
-pub struct Restriction<'a> {
-    rel: Box<Relation<'a>>,
+pub struct Restriction {
+    rel: Box<Relation>,
     e:   Expr,
 }
 
-impl<'a> Restriction<'a> {
-    pub fn new(base: Box<Relation<'a>>,
+impl Restriction {
+    pub fn new(base: Box<Relation>,
                e: Expr,
-    ) -> Restriction<'a> {
+    ) -> Restriction {
         Restriction {
             rel: base,
             e: e,
@@ -116,7 +121,7 @@ impl<'a> Restriction<'a> {
     }
 }
 
-impl<'a, 'r> Relation<'r> for Restriction<'a> {
+impl Relation for Restriction {
     fn read(&mut self) -> bool {
         let mut found = false;
         while !found {
@@ -147,19 +152,19 @@ impl<'a, 'r> Relation<'r> for Restriction<'a> {
     }
 }
 
-pub struct ConcatRelation<'a> {
-    relations: Vec<Box<Relation<'a> >>,
+pub struct ConcatRelation {
+    relations: Vec<Box<Relation >>,
     current: usize,
 }
 
-pub struct Projection<'a> {
-    relation: Box<Relation<'a>>,
+pub struct Projection {
+    relation: Box<Relation>,
     colmap: Vec<usize>,
     colcount: usize,
 }
 
-impl<'a> Projection<'a> {
-    pub fn new(rel: Box<Relation<'a>>, cols: Vec<String>) -> Projection<'a> {
+impl<'a> Projection {
+    pub fn new(rel: Box<Relation>, cols: Vec<String>) -> Projection {
         let mut colindexes = Vec::new();
 
         // make colindexes [-1, -1, -1, ...] same size as cols
@@ -186,7 +191,7 @@ impl<'a> Projection<'a> {
     }
 }
 
-impl<'a, 'r> Relation<'r> for Projection<'a> {
+impl Relation for Projection {
     fn length(&self) -> usize {
         self.relation.length()
     }
@@ -211,35 +216,70 @@ impl<'a, 'r> Relation<'r> for Projection<'a> {
     }
 }
 
-impl<'a> ConcatRelation<'a> {
-    pub fn new() -> ConcatRelation<'a> {
+impl ConcatRelation {
+    pub fn new() -> ConcatRelation {
         ConcatRelation {
             relations: Vec::new(),
             current: 0,
         }
     }
-    pub fn add(&mut self, rel: Box<Relation<'a>>) {
+    pub fn add(&mut self, rel: Box<Relation>) -> bool {
+        // first check that the schema is the same
+        if self.relations.len() > 0 {
+            if self.relations[0].length() != rel.length() {
+                println!("union: schema lengths are different {} vs {}",
+                         self.relations[0].length(),
+                         rel.length());
+                return false;
+            }
+            for i in 0..rel.length() {
+                if self.relations[0].name(i) != rel.name(i) {
+                    println!("union: name {} is different: '{}' vs '{}'",
+                             i,
+                             self.relations[0].name(i),
+                             rel.name(i));
+                    return false;
+                }
+                if self.relations[0].ctype(i) != rel.ctype(i) {
+                    println!("union: type {} is different: '{:?}' vs '{:?}'",
+                             i,
+                             self.relations[0].ctype(i),
+                             rel.ctype(i));
+                    return false;
+                }
+                if self.relations[0].nullable(i) != rel.nullable(i) {
+                    println!("union: name {} is different: '{}' vs '{}'",
+                             i,
+                             self.relations[0].nullable(i),
+                             rel.nullable(i));
+                    return false;
+                }
+            }
+        }
         self.relations.push(rel);
+        true
     }
 }
 
-impl<'a, 'r> Relation<'r> for ConcatRelation<'a> {
+impl Relation for ConcatRelation {
     fn length(&self) -> usize {
-        self.relations[self.current].length()
+        if self.relations.len() == 0 {
+            panic!("ConcatRelation::length => no relations!");
+        }
+        self.relations[0].length()
     }
     fn read(&mut self) -> bool {
         loop {
             if self.current < self.relations.len() {
-                let done = self.relations[self.current].read();
-                if done {
+                let ok = self.relations[self.current].read();
+                if !ok {
                     self.current += 1;
                 } else {
-                    return false;
+                    return ok;
                 }
             } else {
                 // done=true because no relations
-                println!("no rels!");
-                return true;
+                return false;
             }
         }
     }
@@ -265,76 +305,14 @@ impl<'a, 'r> Relation<'r> for ConcatRelation<'a> {
 struct ParseError {
 }
 
-const space: u8 = ' ' as u8;
-const tab: u8 = '\t' as u8;
+const SPACE: u8 = ' ' as u8;
+const TAB: u8 = '\t' as u8;
 const CR: u8 = '\r' as u8;
 const LF: u8 = '\n' as u8;
 const DQUOTE: u8 = '"' as u8;
 const LBRACE: u8 = '{' as u8;
 const RBRACE: u8 = '}' as u8;
 const RE: u8 = '/' as u8;
-
-fn expect(s: &[u8], s2: &str, i: usize) -> usize {
-    let mut j = i;
-    let u = s2.as_bytes();
-    // skip SPACE and TAB
-    while j < s.len() && (s[j] == space || s[j] == tab) {
-        j += 1;
-    }
-    let mut k = 0;
-    while j < s.len() && k < u.len() && s[j + k] == u[k] {
-        k += 1;
-    }
-    // return j + k if u fully matched
-    if k == u.len() {
-        j + k
-    } else {
-        i
-    }
-}
-
-fn parse_token(s: &[u8], i: usize) -> (String, usize) {
-    let mut j = i;
-    // do not skip CR LF
-    while j < s.len() && (s[j] == space || s[j] == tab) {
-        j += 1;
-    }
-    let mut k = j;
-    if k < s.len() && s[k] == DQUOTE { // quoted text
-        k += 1;
-        while k < s.len() && s[k] != DQUOTE {
-            k += 1;
-        }
-        if k < s.len() && s[k] == DQUOTE {
-            k += 1;
-        }
-        // signal an error on CRLF/EOF ?
-    } else if k < s.len() && s[k] == RE { // quoted text
-        k += 1;
-        while k < s.len() && s[k] != RE {
-            k += 1;
-        }
-        if k < s.len() && s[k] == RE {
-            k += 1;
-        }
-        // signal an error on CRLF/EOF ?
-    } else if k < s.len() && s[k] == LBRACE { // { braces }
-        while k < s.len() && s[k] != RBRACE {
-            k += 1;
-        }
-        if k < s.len() && s[k] == RBRACE {
-            k += 1;
-        }
-        // signal an error on CRLF/EOF ?
-    } else {
-        // standard token
-        while k < s.len() && s[k] != space && s[k] != tab {
-            k += 1;
-        }
-    }
-    let t = String::from_utf8_lossy(&s[j..k]).to_string(); // TODO
-    (t, k)
-}
 
 // parser
 // -------------------------------------
@@ -375,56 +353,153 @@ enum RelationParam {
     Union { relations: Vec<String> },
 }
 
+struct Tokenizer<'a> {
+    s: &'a [u8],
+    pos: usize,
+}
+
+impl<'a> Tokenizer<'a> {
+    fn new(s: &'a [u8]) -> Tokenizer<'a> {
+        Tokenizer { s: s, pos: 0 }
+    }
+
+    fn skip_whitespace(&mut self, a: u8, b: u8, c: u8, d: u8) -> bool {
+        let mut k = self.pos;
+        let s = self.s;
+        while k < s.len() && (s[k] == a || s[k] == b || s[k] == c || s[k] == d) {
+            k += 1;
+        }
+        let result = self.pos != k;
+        self.pos = k;
+        result
+    }
+
+    fn eos(&self) -> bool {
+        self.pos >= self.s.len()
+    }
+
+    fn parse_token(&mut self) -> Option<String> {
+        let mut k = self.pos;
+        let s = self.s;
+
+        if k < s.len() && (s[k] == DQUOTE || s[k] == RE || s[k] == LBRACE) { // quoted text
+            // char that ends this quote
+            let endchar = if s[k] == LBRACE { RBRACE } else { s[k] };
+            k += 1;
+            while k < s.len() && s[k] != endchar {
+                k += 1;
+            }
+            // include the endchar
+            if k < s.len() {
+                assert!(s[k] == endchar);
+                k += 1;
+            } else {
+                return None; // unterminated quote
+            }
+        } else {
+            // standard token, take chars until whitespace
+            while k < s.len() && s[k] != SPACE && s[k] != TAB && s[k] != CR && s[k] != LF {
+                k += 1;
+            }
+        }
+        if self.pos == k {
+            None
+        } else {
+            let t = String::from_utf8_lossy(&s[self.pos..k]).to_string(); // TODO
+            // update pos
+            self.pos = k;
+            Some(t)
+        }
+    }
+
+    fn expect(&mut self, s2: &str) -> bool {
+        let u = s2.as_bytes();
+        let mut k = 0;
+        while self.pos < self.s.len() && k < u.len() && self.s[self.pos + k] == u[k] {
+            k += 1;
+        }
+        // return j + k if u fully matched
+        if k == u.len() {
+            // update pos
+            self.pos = self.pos + k;
+            true
+        } else {
+            false
+        }
+    }
+}
+
 fn parse_relalgs(s: &[u8]) -> Option<Rels> { // Result
     let mut r = Rels::new();
     let mut pos = 0;
 
+    let mut t = Tokenizer::new(s);
+
+    // skip newlines and whitespace
+    t.skip_whitespace(SPACE, TAB, CR, LF);
+
     loop {
-        let (name, i) = parse_token(s, pos);
-        println!("parse_token={}", name);
-        if i == pos { // EOS
+        t.skip_whitespace(SPACE, TAB, TAB, TAB);
+        let token = t.parse_token();
+        if token.is_none() {
             break;
         }
-        let j = expect(s, "=", i);
-        let (reltype, k) = parse_token(s, j);
+        let name = token.unwrap();
+        println!("parse_token={}", name);
+        t.skip_whitespace(SPACE, TAB, TAB, TAB);
+        if !t.expect("=") {
+            println!("expected = after {}", name);
+            return None;
+        }
+
+        t.skip_whitespace(SPACE, TAB, TAB, TAB);
+
+        let reltypetoken = t.parse_token();
+        if reltypetoken.is_none() {
+            println!("expected relation_type after =");
+            return None;
+        }
+
+        let reltype = reltypetoken.unwrap();
         match reltype.as_str() {
             "file" => {
-                let (filename, l) = parse_token(s, k);
-                let m = expect(s, "\n", l);
-                if m == l {
-                    println!("expecting eol after filename in 'file'");
+                t.skip_whitespace(SPACE, TAB, TAB, TAB);
+                let filename = t.parse_token();
+                if filename.is_none() {
+                    println!("expecting filename after 'file' relation type");
                     return None;
                 }
-                let fr = RelationParam::File { filename: filename }; // FileRelation::new(filename.as_str()).unwrap();
+                if !t.skip_whitespace(CR, LF, LF, LF) && !t.eos() {
+                    println!("expecting CRLF or end-of-string after filename ({:?}) in 'file', eos={}", filename, t.eos());
+                    return None;
+                }
+                println!("read file param {:?}", filename);
+                let fr = RelationParam::File { filename: filename.unwrap() }; // FileRelation::new(filename.as_str()).unwrap();
                 r.add(name, fr);
-                pos = m;
             },
             "union" => {
                 let mut relations = Vec::<String>::new(); // ConcatRelation::new();
-                let mut start = k;
                 loop {
-                    let (relname, l) = parse_token(s, start);
-                    if l != start {
-                        println!("relname = {}", relname);
-                        relations.push(relname);
+                    t.skip_whitespace(SPACE, TAB, TAB, TAB);
+                    let relname = t.parse_token();
+                    if let Some(name) = relname {
+                        println!("relname = {}", name);
+                        relations.push(name);
                     } else {
-                        // EOF
-                        start = l;
+                        // end of string
                         break;
                     }
-
-                    let m = expect(s, "\n", l);
-                    start = m; // move past eol
-                    if m != l { // found EOL?
+                    t.skip_whitespace(SPACE, TAB, TAB, TAB);
+                    // if endline then parse next statement
+                    if t.skip_whitespace(CR, LF, LF, LF) {
                         break;
                     }
                 }
                 let u = RelationParam::Union { relations: relations };
                 r.add(name, u);
-                pos = start;
             },
             _ => {
-                println!("unknown rel {}", reltype);
+                println!("unknown reltype '{}'", reltype);
             }
         }
     }
@@ -432,26 +507,38 @@ fn parse_relalgs(s: &[u8]) -> Option<Rels> { // Result
     Some(r)
 }
 
-fn resolve_relation<'a>(name: &str, r: &Rels, variables: &HashMap<String, String>) -> Option<Box<Relation<'a>>> {
+fn resolve_relation(name: &str, r: &Rels, variables: &HashMap<String, String>) -> Option<Box<Relation>> {
     if let Some(top) = r.get(name) {
         match top {
             RelationParam::File { filename } => {
-                let fr = FileRelation::new(&filename).unwrap();
-                let r : Box<Relation<'a>> = Box::new(fr);
+                let v: Vec<char> = filename.chars().collect();
+                let first = v[0];
+                let last = v[v.len() - 1];
+                let fr = if first == '"' && last == '"' { // filename
+                    let name = &filename[1..v.len()-1];
+                    println!("resolve fname ({})", name);
+                    FileRelation::new(name).unwrap()
+                } else {
+                    FileRelation::new(&filename).unwrap()
+                };
+                let r : Box<Relation> = Box::new(fr);
                 let result = Some(r);
                 result
             },
             RelationParam::Union { relations } => {
                 let mut co = ConcatRelation::new();
+                println!("union of {:?}", relations);
                 for relation in relations {
                     let v: Vec<char> = relation.chars().collect();
                     let first = v[0];
                     let last = v[v.len() - 1];
                     if first == '"' && last == '"' { // filename
+                        println!("union filename {}", relation);
                         let fr = FileRelation::new(&relation[1..v.len()-2]).unwrap();
                         let r : Box<Relation> = Box::new(fr);
                         co.add(r);
                     } else if first == '\'' && last == '\'' { // regex over filenames
+                        println!("union: regex");
                         let unquoted = &relation[1..v.len()-1];
 
                         let (dir, regexp) = if let Some(index) = unquoted.rfind('/') {
@@ -469,10 +556,15 @@ fn resolve_relation<'a>(name: &str, r: &Rels, variables: &HashMap<String, String
                                 let name = e.file_name();
                                 match name.into_string() {
                                     Ok(s) => {
+                                        println!("union: found file {} match: {}", s, re.is_match(&s));
                                         if re.is_match(&s) {
                                             let fr = FileRelation::new(e.path().to_str().unwrap()).unwrap();
                                             let r: Box<Relation> = Box::new(fr);
-                                            co.add(r);
+                                            let added = co.add(r);
+                                            if !added {
+                                                println!("unable to add relation because of schema mismatch");
+                                                return None;
+                                            }
                                         }
                                     },
                                     Err(os) => {
@@ -484,6 +576,7 @@ fn resolve_relation<'a>(name: &str, r: &Rels, variables: &HashMap<String, String
                             }
                         }
                     } else { // name of some other rel
+                        panic!("TODO: >>{}<<", relation);
                     }
                 }
                 Some(Box::new(co))
@@ -494,9 +587,12 @@ fn resolve_relation<'a>(name: &str, r: &Rels, variables: &HashMap<String, String
     }
 }
 
-pub fn create_relation<'a>(name: &str, rel: &str, variables: &HashMap<String, String>) -> Option<Box<Relation<'a>>> {
+pub fn create_relation(name: &str, rel: &str, variables: &HashMap<String, String>) -> Option<Box<Relation>> {
     let rels = parse_relalgs(rel.as_bytes()).unwrap();
-    resolve_relation(name, &rels, &variables)
+    println!("creating relation {} from {:?} ({})", name, rels, rel);
+    let z = resolve_relation(name, &rels, &variables);
+    println!("created = {:?}", z.is_some());
+    z
 }
 
 
@@ -504,14 +600,20 @@ pub fn create_relation<'a>(name: &str, rel: &str, variables: &HashMap<String, St
 fn test_parsing() {
     let s = "hello = world {b r a c e} \"q u o t {e} d\"";
     let u = s.as_bytes();
-    let (t1, i) = parse_token(u, 0);
-    let j = expect(u, "=", i);
-    let (t2, k) = parse_token(u, j);
-    let (t3, l) = parse_token(u, k);
-    let (t4, m) = parse_token(u, l);
+    let mut t = Tokenizer::new(&u);
+    let t1 = t.parse_token().unwrap();
+    t.skip_whitespace(SPACE, TAB, TAB, TAB);
+    let z = t.expect("=");
+    assert!(z);
+    t.skip_whitespace(SPACE, TAB, TAB, TAB);
+    let t2 = t.parse_token().unwrap();
+    t.skip_whitespace(SPACE, TAB, TAB, TAB);
+    let t3 = t.parse_token().unwrap();
+    t.skip_whitespace(SPACE, TAB, TAB, TAB);
+    let t4 = t.parse_token().unwrap();
     assert!(t1 == "hello");
-    assert!(i != j);
     assert!(t2 == "world");
+    println!("t3 = {}", t3);
     assert!(t3 == "{b r a c e}");
     assert!(t4 == "\"q u o t {e} d\"");
 }
