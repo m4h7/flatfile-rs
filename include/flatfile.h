@@ -45,7 +45,9 @@ unsigned int readf_row_get_u32(unsigned int fhandle, unsigned int index);
 unsigned int readf_row_is_null(unsigned int fhandle, unsigned int index);
 unsigned int readf_row_start(unsigned int fhandle);
 void readf_close(unsigned int fhandle);
-unsigned int readf_open(char const* name);
+void readf_row_end(unsigned int fhandle);
+int readf_open(char const* name);
+int readf_open_relation(char const* name, char const* reldef);
 unsigned int readf_clone_schema(unsigned int fhandle);
 
 #endif  // FLATFILE_H_INCLUDED
