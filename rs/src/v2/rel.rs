@@ -223,6 +223,9 @@ impl ConcatRelation {
             current: 0,
         }
     }
+    pub fn size(&self) -> usize {
+        self.relations.len()
+    }
     pub fn add(&mut self, rel: Box<Relation>) -> bool {
         // first check that the schema is the same
         if self.relations.len() > 0 {
@@ -579,7 +582,11 @@ fn resolve_relation(name: &str, r: &Rels, variables: &HashMap<String, String>) -
                         panic!("TODO: >>{}<<", relation);
                     }
                 }
-                Some(Box::new(co))
+                if co.size() > 0 {
+                    Some(Box::new(co))
+                } else {
+                    None
+                }
             },
         }
     } else {
