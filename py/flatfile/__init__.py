@@ -1,6 +1,8 @@
 import _flatfile
 import os.path
 
+class OpenError(Exception): pass
+
 class Reader:
     def __init__(self, filename, schema = None, reldef = None):
         self.filename = filename
@@ -98,7 +100,7 @@ class Reader:
             self.h = _flatfile.readf_open(self.filename)
         if self.h == -1:
             self.h = None
-            raise Exception("unable to open file/relation {}".format(self.filename))
+            raise OpenError("unable to open file/relation {}".format(self.filename))
 
         self.sch = _flatfile.readf_clone_schema(self.h)
 
