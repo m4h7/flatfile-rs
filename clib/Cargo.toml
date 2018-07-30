@@ -1,6 +1,7 @@
 [package]
 name = "flatfile-c"
 version = "0.1.0"
+description = "c interface to flatfile"
 authors = ["mhg <mhg@urml.eu>"]
 
 [lib]
