@@ -10,3 +10,4 @@ brotli2 = "*"
 adler32 = "*"
 memmap = "*"
 regex = "1"
+

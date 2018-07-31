@@ -10,8 +10,15 @@ use std::fs::{File, OpenOptions};
 use v2::filebuf::{FileBuf, ReadFileBuf};
 use v2::vecbuf::Vecbuf;
 
+use v2::err::SchemaReadError;
+
 extern crate lz4;
 extern crate zstd;
+
+//use proptest::prelude::any;
+
+//#[macro_use] extern crate proptest;
+//use proptest::prelude::*;
 
 fn read_varint<B: ReadBuf>(b: &mut B) -> usize {
     let mut bits: usize = 0;
@@ -44,9 +51,9 @@ fn write_varint<B: AppendBuf>(b: &mut B, v: usize) {
     }
 }
 
-fn read_varstring<B: ReadBuf>(b: &mut B) -> Option<String> {
+fn read_varstring<B: ReadBuf>(b: &mut B) -> Result<String, SchemaReadError> {
     let co = read_db(b);
-    if co == 0 as u8 {
+    if co == 0 as u8 { // no compression
         let size = read_varint(b);
         let mut bytes = Vec::new();
         for i in 0..size {
@@ -55,7 +62,7 @@ fn read_varstring<B: ReadBuf>(b: &mut B) -> Option<String> {
         }
         // convert bytes to string
         let s = str::from_utf8(bytes.as_slice()).unwrap();
-        Some(s.to_string()) // TBD
+        Ok(s.to_string()) // TBD
     } else if co == 'Z' as u8 {
         let size = read_varint(b);
         let mut bytes = Vec::new();
@@ -66,10 +73,16 @@ fn read_varstring<B: ReadBuf>(b: &mut B) -> Option<String> {
         let mut d = zstd::Decoder::new(bytes.as_slice()).unwrap();
         let mut dbuf: Vec<u8> = Vec::new();
         let r = d.read_to_end(&mut dbuf);
-        r.unwrap();
-        d.finish();
-        let s = str::from_utf8(&dbuf).unwrap();
-        Some(s.to_string())
+        match r {
+            Ok(_rdsize) => {
+                let s = str::from_utf8(&dbuf).unwrap();
+                Ok(s.to_string())
+            }
+            Err(e) => {
+                println!("read_varstring: Z/decompression error: {:?}", e);
+                Err(SchemaReadError::DecompressionError)
+            }
+        }
     } else if co == 'L' as u8 {
         let size = read_varint(b);
 //        if !check(b, size) {
@@ -83,10 +96,10 @@ fn read_varstring<B: ReadBuf>(b: &mut B) -> Option<String> {
         let mut d = lz4::Decoder::new(bytes.as_slice()).unwrap();
         let mut dbuf: Vec<u8> = Vec::new();
         let r = d.read_to_end(&mut dbuf);
-        r.unwrap();
         d.finish();
+        r.unwrap();
         let s = str::from_utf8(&dbuf).unwrap();
-        Some(s.to_string())
+        Ok(s.to_string())
     } else {
         panic!("unknown compression type {}", co);
     }
@@ -129,8 +142,9 @@ fn write_varstring<B: AppendBuf>(b: &mut B, s: &str) {
         }
     } else {
         write_db(b, 0 as u8); // no compression
-        write_varint(b, s.len());
-        for c in s.as_bytes() {
+        let bytes = s.as_bytes();
+        write_varint(b, bytes.len());
+        for c in bytes {
             write_db(b, *c);
         }
     }
@@ -223,8 +237,8 @@ pub fn read_schema_v2<B: ReadBuf>(
         for i in 0..num_columns {
             let vs = read_varstring(buf);
             let s = match vs {
-                Some(x) => x,
-                None => return None
+                Ok(x) => x,
+                Err(e) => return None
             };
             let ct = read_db(buf);
             let n = read_db(buf);
@@ -302,7 +316,10 @@ pub fn schema_read_row<B: ReadBuf>(
     mut buf: &mut B,
     values: &mut [ColumnValue],
     schema: &Schema2,
-) -> bool {
+) -> Result<(), SchemaReadError> {
+    if buf.past_eof() {
+        return Result::Err(SchemaReadError::Eof);
+    }
     // read null bytes
     let modulo = schema.len() % 8;
     let aligned_len = schema.len() + if modulo > 0 { 8 - modulo } else { 0 };
@@ -315,6 +332,10 @@ pub fn schema_read_row<B: ReadBuf>(
 //            }
             // read null byte giving the null state of next 8 values
             let b = read_db(&mut adlerbuf);
+            if adlerbuf.past_eof() {
+                // if the first byte read fails report eof not unexpected_eof
+                return Result::Err(SchemaReadError::Eof);
+            }
             // number of column remaining (0..8)
             let jmax = min(8, schema.len() - i * 8);
 
@@ -326,21 +347,28 @@ pub fn schema_read_row<B: ReadBuf>(
                     match schema.ctype(i * 8 + j) {
                         ColumnType::U32le => {
                             let v = read_dd_le(&mut adlerbuf);
+                            if adlerbuf.past_eof() {
+                                return Result::Err(SchemaReadError::UnexpectedEof);
+                            }
                             values[i * 8 + j] = ColumnValue::U32 { v: v};
                         },
                         ColumnType::U64le => {
                             let v = read_dq_le(&mut adlerbuf);
+                            if adlerbuf.past_eof() {
+                                return Result::Err(SchemaReadError::UnexpectedEof);
+                            }
                             values[i * 8 + j] = ColumnValue::U64 { v: v};
                         },
                         ColumnType::String => {
                             let v = read_varstring(&mut adlerbuf);
                             match v {
-                                Some(s) => {
+                                Ok(s) => {
                                     values[i * 8 + j] = ColumnValue::String { v: s };
                                 }
-                                None => {
+                                Err(e) => {
+                                    // decompression failed etc.
                                     values[i * 8 + j] = ColumnValue::Null;
-//                                    return false; TODO: why?
+                                    return Result::Err(e);
                                 }
                             }
                         },
@@ -350,11 +378,14 @@ pub fn schema_read_row<B: ReadBuf>(
             adlerbuf.hash()
         };
         let fhash = read_dd_le::<B>(&mut buf);
+        if buf.past_eof() {
+            return Result::Err(SchemaReadError::Eof);
+        }
         if hash != fhash {
-            return false;
+            return Result::Err(SchemaReadError::ChecksumError);
         }
     }
-    true
+    Result::Ok(())
 }
 
 fn schema_write_row<B: AppendBuf>(
@@ -557,7 +588,7 @@ fn test_schema_write() {
         rvec.push(ColumnValue::Null);
         rvec.push(ColumnValue::Null);
         let rr = schema_read_row(&mut vbuf, rvec.as_mut_slice(), &sch);
-        assert!(rr == true);
+        assert!(rr.is_ok());
 
         assert!(vec[0] == rvec[0]);
         assert!(vec[1] == rvec[1]);
@@ -590,3 +621,29 @@ fn test_string_rw() {
         n += 1024;
     }
 }
+
+// proptest! {
+//     #[test]
+//     fn varint_doesnt_crash(n in any::<usize>()) {
+//         let mut vecbuf = Vecbuf::new(8192);
+//         write_varint(&mut vecbuf, n);
+//         vecbuf.reset();
+//         let z = read_varint(&mut vecbuf);
+//         if n != z {
+//             println!("s='{}' z='{}'", n, z);
+//         }
+//         assert!(n == z);
+//     }
+
+//     #[test]
+//     fn varstring_doesnt_crash(s in any::<String>()) {
+//         let mut vecbuf = Vecbuf::new(8192);
+//         write_varstring(&mut vecbuf, &s);
+//         vecbuf.reset();
+//         let z = read_varstring(&mut vecbuf).unwrap();
+//         if s != z {
+//             println!("s='{}' z='{}'", s, z);
+//         }
+//         assert!(s == z);
+//     }
+// }

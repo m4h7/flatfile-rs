@@ -7,3 +7,4 @@ pub mod vecbuf;
 pub mod adlerbuf;
 pub mod rel;
 pub mod ast;
+pub mod err;

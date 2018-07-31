@@ -18,6 +18,10 @@ impl Vecbuf {
         }
     }
 
+    pub fn reset(&mut self) {
+        self.pos = 0;
+    }
+
     pub fn len(&self) -> usize {
         self.buf.len()
     }
