@@ -1,6 +1,5 @@
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int, c_uint, c_ulong};
-use std::io::{Seek, SeekFrom};
 use std::fs::{File, OpenOptions};
 use std::cmp::min;
 use std::sync::{Once, ONCE_INIT};
@@ -13,7 +12,7 @@ use flatfile::v2::schema2::Schema;
 extern crate flatfile;
 use flatfile::v2::schema2::Schema2;
 use flatfile::v2::filebuf::FileBuf;
-use flatfile::{ColumnType, MmapBuf, read_schema_v2, ColumnValue, schema_read_row, write_schema_v2, schema_write, ReadFileBuf, FileRelation, create_relation, Relation };
+use flatfile::{ColumnType, read_schema_v2, ColumnValue, write_schema_v2, schema_write, ReadFileBuf, FileRelation, create_relation, Relation };
 
 enum Handle {
     WriteFile {
@@ -200,7 +199,7 @@ pub extern fn writef_get_schema(handle: c_uint) -> c_uint {
 pub extern fn writef_create(name: *const c_char,
                             schema_handle: usize) -> c_uint {
     let fname = unsafe { CStr::from_ptr(name) }.to_str().unwrap();
-    let mut f = File::create(fname).unwrap();
+    let f = File::create(fname).unwrap();
 
     match get_handle(schema_handle) {
         Handle::Schema { schema } => {
@@ -209,7 +208,7 @@ pub extern fn writef_create(name: *const c_char,
 
             // create a row to store values for write
             let mut writevec = Vec::new();
-            for n in 0..schema.len() {
+            for _ in 0..schema.len() {
                 writevec.push(ColumnValue::Null);
             }
 
@@ -259,13 +258,13 @@ pub extern fn writef_open(name: *const c_char) -> c_uint {
     };
 
     let mut writevec = Vec::new();
-    for n in 0..sch.len() {
+    for _ in 0..sch.len() {
         writevec.push(ColumnValue::Null);
     }
 
-    let mut f = OpenOptions::new().append(true).open(fname).unwrap();
+    let f = OpenOptions::new().append(true).open(fname).unwrap();
 
-    let mut filebuf = FileBuf::new(f, 4096);
+    let filebuf = FileBuf::new(f, 4096);
 
     let h = put_handle(Handle::WriteFile {
         f: filebuf,
@@ -329,7 +328,7 @@ pub extern fn readf_row_start(fhandle: c_uint) -> c_uint {
 }
 
 #[no_mangle]
-pub extern fn readf_row_end(fhandle: c_uint) {
+pub extern fn readf_row_end(_fhandle: c_uint) {
 }
 
 #[no_mangle]
@@ -381,7 +380,7 @@ pub extern fn readf_row_get_string_len(fhandle: c_uint, index: c_uint) -> c_ulon
             match rel.value(index as usize) {
                 ColumnValue::String { ref v } => {
                     let u = v.as_str().as_bytes();
-                    v.len() as c_ulong
+                    u.len() as c_ulong
                 }
                 ColumnValue::Null => {
                     0
