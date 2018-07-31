@@ -10,9 +10,6 @@ for i in range(0, slen):
     t = flatfile.schema2_get_column_type(sch, i)
     types.append(t)
 
-flatfile.schema2_destroy(sch)
-
-
 def read_row(rh, types):
     if flatfile.readf_row_start(rh):
         r = []

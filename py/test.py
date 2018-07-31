@@ -130,11 +130,9 @@ def test_read2():
     flatfile.readf_close(rh);
     flatfile.schema2_destroy(sch)
 
-reldef1 = """xyz = file "/tmp/_test2.dat"
-"""
 
 def test_relation_file():
-    with Reader("xyz", reldef=reldef1) as r:
+    with Reader("xyz", reldef="xyz = file \"/tmp/_test2.dat\"") as r:
         for i, row in enumerate(r.fetch()):
             if i == 0:
                 assert row == row1
@@ -151,7 +149,7 @@ def test_relation_file_union():
         w.write_row(row2)
         w.write_row(row1)
 
-    with Reader("xyz", reldef="xyz = union '/tmp/_test[0-9XY].dat'") as r:
+    with Reader("abc", reldef="abc = union '/tmp/_test[XY].dat'") as r:
         for i, row in enumerate(r.fetch()):
             print("union row =>", row)
 
