@@ -34,7 +34,7 @@ void writef_row_set_u64(unsigned int handle, unsigned int index,
 void writef_row_set_string(unsigned int handle, unsigned int index,
                            char const* s);
 bool writef_row_end(unsigned int handle);
-void writef_flush(unsigned int handle);
+bool writef_flush(unsigned int handle);
 
 unsigned long readf_row_get_string_len(unsigned int fhandle,
                                        unsigned int index);
