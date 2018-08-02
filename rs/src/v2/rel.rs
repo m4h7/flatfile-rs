@@ -7,7 +7,7 @@ use v2::err::{SchemaReadError};
 
 use std::collections::HashMap;
 use std::fs::{File, read_dir};
-use std::io::Result;
+use std::io::{Error, ErrorKind, Result};
 //use std::rc::Rc;
 //use std::cell::RefCell;
 use std::borrow::Borrow;
@@ -103,6 +103,19 @@ impl FileRelation {
         let mut readvec = Vec::new();
 
         let mut f = File::open(fname)?;
+
+        match f.metadata() {
+            Ok(md) => {
+                if md.len() == 0 { // mmap will not work
+                    println!("FileRelation::new(\"{}\") - file is empty", fname);
+                    let empty_file = Error::new(ErrorKind::Other, "empty file");
+                    return Err(empty_file);
+                }
+            }
+            Err(e) => {
+                return Err(e)
+            }
+        }
 
         let mut mmapbuf = MmapBuf::new(f);
 
