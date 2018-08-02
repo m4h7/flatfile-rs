@@ -28,6 +28,16 @@ class Reader:
                 break
 
     def read_columns(self, columns):
+        for col in columns:
+            found = False
+            for name, _, _ in self.schema:
+                if col == name:
+                    found = True
+            if not found:
+                raise Exception(
+                    "column {} is not in schema: {}".format(
+                        col, self.schema
+                        ))
         if not _flatfile.readf_row_start(self.h):
             return None
         val = []
