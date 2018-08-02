@@ -65,7 +65,10 @@ impl Relation for FileRelation {
                 Ok(_) => return true, // have more data
                 Err(e) => {
                     match e {
-                        SchemaReadError::UnexpectedEof => return false,
+                        SchemaReadError::UnexpectedEof => {
+                            println!("SchemaReadError::UnexpectedEof");
+                            return false;
+                        },
                         SchemaReadError::Eof => return false,
                         SchemaReadError::ChecksumError => {
                             println!("SchemaReadError::ChecksumError");

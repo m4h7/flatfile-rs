@@ -7,7 +7,10 @@ slen = flatfile.schema2_len(sch)
 
 types = []
 for i in range(0, slen):
+    n = flatfile.schema2_get_column_name(sch, i)
     t = flatfile.schema2_get_column_type(sch, i)
+    nl = flatfile.schema2_get_column_nullable(sch, i)
+    print("{} {} {}".format(n, t, nl))
     types.append(t)
 
 def read_row(rh, types):
@@ -22,9 +25,12 @@ def read_row(rh, types):
                 val = flatfile.readf_row_get_u64(rh, index)
             elif t == "string":
                 val = flatfile.readf_row_get_string(rh, index)
+            else:
+                print("unknown type", t)
             r.append(val)
         flatfile.readf_row_end(rh)
         return r
+    print("read_row_start -> false")
     return None
 
 

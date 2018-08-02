@@ -379,7 +379,7 @@ pub fn schema_read_row<B: ReadBuf>(
         };
         let fhash = read_dd_le::<B>(&mut buf);
         if buf.past_eof() {
-            return Result::Err(SchemaReadError::Eof);
+            return Result::Err(SchemaReadError::UnexpectedEof);
         }
         if hash != fhash {
             return Result::Err(SchemaReadError::ChecksumError);
