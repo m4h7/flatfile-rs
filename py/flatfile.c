@@ -211,6 +211,9 @@ flatfile_writef_row_end(PyObject* self, PyObject* args) {
         return NULL;
     }
     _Bool r = writef_row_end(fhandle);
+    if (r) {
+        r = writef_flush(fhandle);
+    }
     return PyBool_FromLong(r);
 }
 

@@ -28,7 +28,7 @@ def read_row(rh, types):
     return None
 
 
-counter = 1
+counter = 0
 while True:
     r = read_row(rh, types)
     if r is not None:
