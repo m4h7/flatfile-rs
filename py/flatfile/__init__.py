@@ -28,6 +28,10 @@ class Reader:
                 break
 
     def read_columns(self, columns):
+        if not hasattr(columns, "__iter___"):
+            raise Exception("columns argument must be an iterable")
+        if isinstance(columns, str):
+            raise Exception("columns argument is a string, expected iterable")
         for col in columns:
             found = False
             for name, _, _ in self.schema:
