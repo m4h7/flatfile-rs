@@ -9,5 +9,5 @@ name = "libflatfile"
 crate-type = ["staticlib"]
 
 [dependencies]
-flatfile = { git = "https://github.com/m4h7/flatfile-rs" }
+flatfile = { path = "../rs" }
 libc = "*"

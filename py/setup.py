@@ -1,4 +1,4 @@
-from distutils.core import setup, Extension
+from setuptools import setup, Extension
 
 module1 = Extension('_flatfile',
                     include_dirs = ['../include'],
@@ -7,8 +7,8 @@ module1 = Extension('_flatfile',
                     library_dirs = ['../clib/target/debug'],
                     sources = ['flatfile.c'])
 
-setup(name='Flatfile',
-      version='1.0.1',
+setup(name='yrml-flatfile',
+      version='1.1.1',
       description='flatfile package',
       packages=["flatfile"],
       ext_modules=[module1])
