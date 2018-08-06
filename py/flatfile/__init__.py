@@ -10,6 +10,48 @@ class Reader:
         self.h = None
         self.sch = None
         self.reldef = reldef
+        self._open()
+
+    def _open(self):
+        if self.reldef is not None:
+            h = _flatfile.readf_open_relation(self.filename, self.reldef)
+        else:
+            h = _flatfile.readf_open(self.filename)
+
+        if h == -1:
+            raise OpenError("unable to open file/relation {}".format(self.filename))
+        self.h = h
+
+        self.sch = _flatfile.readf_clone_schema(self.h)
+
+        schema = []
+        schemalen = _flatfile.schema2_len(self.sch)
+
+        for n in range(0, schemalen):
+            item = [
+                _flatfile.schema2_get_column_name(self.sch, n),
+                _flatfile.schema2_get_column_type(self.sch, n),
+                _flatfile.schema2_get_column_nullable(self.sch, n),
+            ]
+            schema.append(item)
+
+        if self.schema is not None:  # compare
+            if len(self.schema) != len(schema):
+                self.schema_error(self.schema, schema, "length")
+            for j in range(0, len(schema)):
+                if schema[j][0] != self.schema[j][0]:
+                    self.schema_error(self.schema, schema, "name")
+                elif schema[j][1] != self.schema[j][1]:
+                    self.schema_error(self.schema, schema, "type")
+                elif schema[j][2] != self.schema[j][2]:
+                    self.schema_error(self.schema, schema, "nullable")
+        else:
+            self.schema = schema
+
+    def _close(self):
+        if self.h is not None:
+            _flatfile.readf_close(self.h)
+        self.h = None
 
     def fetch_columns(self, columns):
         while True:
@@ -100,53 +142,19 @@ class Reader:
             print("{} {} {} {}", n, name, _type, nullable)
 
     def schema_error(self, expected, fileschema, reason):
-        print("expected schema:")
+        print("========== SCHEMA ERROR ==========")
+        print("EXPECTED SCHEMA:")
         self.print_schema(expected)
-        print("file schema:")
+        print("FILE SCHEMA:")
         self.print_schema(fileschema)
-        print("reason:", reason)
-        raise Exception("schema different")
+        print("REASON:", reason)
+        raise Exception("File schema is different from expected schema")
 
     def __enter__(self):
-        if self.reldef is not None:
-            self.h = _flatfile.readf_open_relation(self.filename, self.reldef)
-        else:
-            self.h = _flatfile.readf_open(self.filename)
-        if self.h == -1:
-            self.h = None
-            raise OpenError("unable to open file/relation {}".format(self.filename))
-
-        self.sch = _flatfile.readf_clone_schema(self.h)
-
-        schema = []
-        schemalen = _flatfile.schema2_len(self.sch)
-
-        for n in range(0, schemalen):
-            item = [
-                _flatfile.schema2_get_column_name(self.sch, n),
-                _flatfile.schema2_get_column_type(self.sch, n),
-                _flatfile.schema2_get_column_nullable(self.sch, n),
-            ]
-            schema.append(item)
-
-        if self.schema is not None:  # compare
-            if len(self.schema) != len(schema):
-                self.schema_error(self.schema, schema, "length")
-            for j in range(0, len(schema)):
-                if schema[j][0] != self.schema[j][0]:
-                    self.schema_error(self.schema, schema, "name")
-                elif schema[j][1] != self.schema[j][1]:
-                    self.schema_error(self.schema, schema, "type")
-                elif schema[j][2] != self.schema[j][2]:
-                    self.schema_error(self.schema, schema, "nullable")
-        else:
-            self.schema = schema
         return self
 
     def __exit__(self, *args):
-        if self.h is not None:
-            _flatfile.readf_close(self.h)
-        self.h = None
+        self._close()
 
 
 class Writer:
@@ -156,12 +164,24 @@ class Writer:
         for name, type_, nullable in schema:
             _flatfile.schema2_add_column(self.sch, name, type_, nullable)
         self.schema = schema
+        self._open()
+
+    def _open(self):
+        h = _flatfile.writef_create(self.filename, self.sch)
+        if h == -1:
+            raise OpenError("Unable to create file {}".format(self.filename))
+        self.h = h
+
+    def _close(self):
+        if self.h is not None:
+            _flatfile.writef_close(self.h)
+            self.h = None
 
     def write_row(self, values):
         _flatfile.writef_row_start(self.h)
         for i in range(0, len(self.schema)):
             if i >= len(values) or values[i] is None:
-                pass  # set nothing
+                pass  # set nothing (keep implicit null value)
             elif self.schema[i][1] == "u32":
                 _flatfile.writef_row_set_u32(self.h, i, values[i])
             elif self.schema[i][1] == "u64":
@@ -173,18 +193,62 @@ class Writer:
         return _flatfile.writef_row_end(self.h)
 
     def __enter__(self):
-        self.h = _flatfile.writef_create(self.filename, self.sch)
         return self
 
     def __exit__(self, *args):
-        _flatfile.writef_close(self.h)
-        self.h = None
-
+        self._close()
 
 class Appender:
     def __init__(self, filename, schema):
         self.filename = filename
         self.schema = schema
+        self.h = None
+        self._open()
+
+    def _open(self):
+        if os.path.exists(self.filename) and os.path.getsize(self.filename) > 0:
+            h = _flatfile.writef_open(self.filename)
+            if h == -1:
+                raise OpenError("Unable to open {} for writing".format(self.filename))
+            self.h = h
+
+            self.sch = _flatfile.writef_get_schema(self.h)
+
+            schema = []
+            for n in range(0, _flatfile.schema2_len(self.sch)):
+                item = [
+                    _flatfile.schema2_get_column_name(self.sch, n),
+                    _flatfile.schema2_get_column_type(self.sch, n),
+                    _flatfile.schema2_get_column_nullable(self.sch, n),
+                ]
+                schema.append(item)
+
+            if self.schema is not None:  # compare
+                if len(self.schema) != len(schema):
+                    self.schema_error(self.schema, schema, "length")
+                for j in range(0, len(schema)):
+                    if schema[j][0] != self.schema[j][0]:
+                        self.schema_error(self.schema, schema, "name")
+                    elif schema[j][1] != self.schema[j][1]:
+                        self.schema_error(self.schema, schema, "type")
+                    elif schema[j][2] != self.schema[j][2]:
+                        self.schema_error(self.schema, schema, "nullable")
+            else:
+                self.schema = schema
+        else:
+            # file does not exist or is zero sized
+            self.sch = _flatfile.schema2_create()
+            for name, type_, nullable in self.schema:
+                _flatfile.schema2_add_column(self.sch, name, type_, nullable)
+            h = _flatfile.writef_create(self.filename, self.sch)
+            if h == -1:
+                raise OpenError("Unable to create file {}".format(self.filename))
+            self.h = h
+
+    def _close(self):
+        if self.h is not None:
+            _flatfile.writef_close(self.h)
+            self.h = None
 
     def write_dict(self, d):
         _flatfile.writef_row_start(self.h)
@@ -225,37 +289,8 @@ class Appender:
         raise Exception("Appender: {}".format(reason))
 
     def __enter__(self):
-        if os.path.exists(self.filename):
-            self.h = _flatfile.writef_open(self.filename)
-            self.sch = _flatfile.writef_get_schema(self.h)
-            schema = []
-            for n in range(0, _flatfile.schema2_len(self.sch)):
-                item = [
-                    _flatfile.schema2_get_column_name(self.sch, n),
-                    _flatfile.schema2_get_column_type(self.sch, n),
-                    _flatfile.schema2_get_column_nullable(self.sch, n),
-                ]
-                schema.append(item)
-            if self.schema is not None:  # compare
-                if len(self.schema) != len(schema):
-                    self.schema_error(self.schema, schema, "length")
-                for j in range(0, len(schema)):
-                    if schema[j][0] != self.schema[j][0]:
-                        self.schema_error(self.schema, schema, "name")
-                    elif schema[j][1] != self.schema[j][1]:
-                        self.schema_error(self.schema, schema, "type")
-                    elif schema[j][2] != self.schema[j][2]:
-                        self.schema_error(self.schema, schema, "nullable")
-            else:
-                self.schema = schema
-        else:
-            # file does not exist
-            self.sch = _flatfile.schema2_create()
-            for name, type_, nullable in self.schema:
-                _flatfile.schema2_add_column(self.sch, name, type_, nullable)
-            self.h = _flatfile.writef_create(self.filename, self.sch)
+        self._open()
         return self
 
     def __exit__(self, *args):
-        _flatfile.writef_close(self.h)
-        self.h = None
+        self._close()
