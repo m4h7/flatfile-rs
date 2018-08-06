@@ -8,7 +8,7 @@ module1 = Extension('_flatfile',
                     sources = ['flatfile.c'])
 
 setup(name='Flatfile',
-      version='1.0',
+      version='1.0.1',
       description='flatfile package',
       packages=["flatfile"],
       ext_modules=[module1])
