@@ -137,7 +137,7 @@ flatfile_writef_open(PyObject* self, PyObject* args) {
         return NULL;
     }
 
-    unsigned int fhandle = writef_open(name);
+    int fhandle = writef_open(name);
 
     return PyLong_FromLong(fhandle);
 }
@@ -256,8 +256,8 @@ flatfile_readf_clone_schema(PyObject* self, PyObject* args) {
     if (!PyArg_ParseTuple(args, "I", &fhandle, &index)) {
         return NULL;
     }
-    unsigned long val = readf_clone_schema(fhandle);
-    return PyLong_FromUnsignedLong(val);
+    int val = readf_clone_schema(fhandle);
+    return PyLong_FromLong(val);
 }
 
 static PyObject*
@@ -266,8 +266,8 @@ flatfile_writef_get_schema(PyObject* self, PyObject* args) {
     if (!PyArg_ParseTuple(args, "I", &fhandle, &index)) {
         return NULL;
     }
-    unsigned long val = writef_get_schema(fhandle);
-    return PyLong_FromUnsignedLong(val);
+    long val = writef_get_schema(fhandle);
+    return PyLong_FromLong(val);
 }
 
 static PyObject*
