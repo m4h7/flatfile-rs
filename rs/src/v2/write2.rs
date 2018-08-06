@@ -125,7 +125,7 @@ fn write_varstring<B: AppendBuf>(b: &mut B, s: &str) {
         compression = 'L' as u8;
         outbuf
     } else { // use zstd
-        let level = 5;
+        let level = 15;
         let mut encoder = zstd::stream::Encoder::new(buf, level).unwrap();
         let wres = encoder.write(s.as_bytes());
         wres.expect("zstd.write");
