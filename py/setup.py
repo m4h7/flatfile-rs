@@ -8,7 +8,7 @@ module1 = Extension('_flatfile',
                     sources = ['flatfile.c'])
 
 setup(name='yrml-flatfile',
-      version='1.1.1',
+      version='1.1.2',
       description='flatfile package',
       packages=["flatfile"],
       ext_modules=[module1])
