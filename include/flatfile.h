@@ -22,7 +22,7 @@ bool schema2_get_column_nullable(unsigned int schema_handle, int index);
  */
 
 unsigned int writef_create(char const* filename, unsigned long schema_handle);
-unsigned int writef_open(char const* filename);
+int writef_open(char const* filename);
 void writef_close(unsigned int handle);
 unsigned int writef_get_schema(unsigned int handle);
 

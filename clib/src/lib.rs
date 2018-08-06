@@ -191,8 +191,8 @@ pub extern fn schema2_get_column_nullable(handle: usize,
 }
 
 #[no_mangle]
-pub extern fn writef_get_schema(handle: c_uint) -> c_uint {
-    handle
+pub extern fn writef_get_schema(handle: c_uint) -> c_int {
+    handle as c_int
 }
 
 #[no_mangle]
@@ -247,14 +247,27 @@ pub extern fn readf_clone_schema(handle: c_uint) -> c_uint {
 }
 
 #[no_mangle]
-pub extern fn writef_open(name: *const c_char) -> c_uint {
+pub extern fn writef_open(name: *const c_char) -> c_int {
     let fname = unsafe { CStr::from_ptr(name) }.to_str().unwrap();
 
     // read schema from the file
     let sch = {
-        let mut f = File::open(fname).unwrap();
+        let mut f = match File::open(fname) {
+            Ok(h) => h,
+            Err(e) => {
+                println!("writef_open: error {:?}", e);
+                return -1;
+            }
+        };
         let mut filebuf = ReadFileBuf::new(f, 4096);
-        read_schema_v2(&mut filebuf).unwrap()
+
+        match read_schema_v2(&mut filebuf) {
+            Some(x) => x,
+            None => {
+                println!("writef_open: failed to read schema from {}", fname);
+                return -1;
+            }
+        }
     };
 
     let mut writevec = Vec::new();
@@ -262,7 +275,14 @@ pub extern fn writef_open(name: *const c_char) -> c_uint {
         writevec.push(ColumnValue::Null);
     }
 
-    let f = OpenOptions::new().append(true).open(fname).unwrap();
+    // reopen in append mode
+    let f = match OpenOptions::new().append(true).open(fname) {
+        Ok(h) => h,
+        Err(e) => {
+            println!("writef_open: (append): error {:?}", e);
+            return -1;
+        }
+    };
 
     let filebuf = FileBuf::new(f, 4096);
 
@@ -272,7 +292,7 @@ pub extern fn writef_open(name: *const c_char) -> c_uint {
         current: writevec,
     });
 
-    h as c_uint
+    h as c_int
 }
 
 #[no_mangle]
