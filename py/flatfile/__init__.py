@@ -70,7 +70,7 @@ class Reader:
                 break
 
     def read_columns(self, columns):
-        if not hasattr(columns, "__iter___"):
+        if not hasattr(columns, "__iter__"):
             raise Exception("columns argument must be an iterable")
         if isinstance(columns, str):
             raise Exception("columns argument is a string, expected iterable")
