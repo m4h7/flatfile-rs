@@ -55,7 +55,10 @@ class Reader:
 
     def fetch_columns(self, columns):
         while True:
-            row = self.read_columns(columns)
+            try:
+                row = self.read_columns(columns)
+            except Exception as e:
+                print(e)
             if row is not None:
                 yield row
             else:
@@ -245,16 +248,26 @@ class Appender:
                 raise OpenError("Unable to create file {}".format(self.filename))
             self.h = h
 
-    def _close(self):
+    def close(self):
         if self.h is not None:
             _flatfile.writef_close(self.h)
             self.h = None
 
     def write_dict(self, d):
+        for key in d:
+            found = False
+            for name, _, _ in self.schema:
+                if key == name:
+                    found = True
+            if not found:
+                raise Exception('column {} not in schema'.format(key))
+
         _flatfile.writef_row_start(self.h)
         for i in range(0, len(self.schema)):
-            name, _, _ = self.schema[i]
+            name, _, nullable = self.schema[i]
             if name not in d or d[name] is None:
+                if nullable is False:
+                    raise Exception('column {} can not be null'.format(name))
                 pass  # set nothing
             elif self.schema[i][1] == "u32":
                 _flatfile.writef_row_set_u32(self.h, i, d[name])
@@ -264,7 +277,9 @@ class Appender:
                 _flatfile.writef_row_set_string(self.h, i, d[name])
             else:
                 raise Exception("unknown type in schema {}".format(self.schema[i][1]))
-        return _flatfile.writef_row_end(self.h)
+        result = _flatfile.writef_row_end(self.h)
+        if not result:
+            raise Exception("row write failed")
 
     def write_row(self, values):
         _flatfile.writef_row_start(self.h)
@@ -293,4 +308,4 @@ class Appender:
         return self
 
     def __exit__(self, *args):
-        self._close()
+        self.close()
