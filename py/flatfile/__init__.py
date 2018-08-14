@@ -59,6 +59,7 @@ class Reader:
                 row = self.read_columns(columns)
             except Exception as e:
                 print(e)
+                raise
             if row is not None:
                 yield row
             else:
@@ -256,9 +257,14 @@ class Appender:
     def write_dict(self, d):
         for key in d:
             found = False
-            for name, _, _ in self.schema:
+            for name, type_, nullable in self.schema:
                 if key == name:
                     found = True
+                    if nullable is False and d[key] is None:
+                        raise Exception('column {} can not be null'.format(key))
+                    if type_ == "string" and type(d[key]) != type(""):
+                        raise Exception('column {} value {} is not a string'.format(key, d[key]))
+
             if not found:
                 raise Exception('column {} not in schema'.format(key))
 
@@ -280,6 +286,7 @@ class Appender:
         result = _flatfile.writef_row_end(self.h)
         if not result:
             raise Exception("row write failed")
+        return result
 
     def write_row(self, values):
         _flatfile.writef_row_start(self.h)
