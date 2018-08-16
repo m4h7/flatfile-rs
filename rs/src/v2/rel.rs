@@ -46,6 +46,7 @@ pub struct FileRelation {
     m: MmapBuf,
     current: Vec<ColumnValue>,
     done: bool,
+    name: String, // used for printing errors
 }
 
 impl Relation for FileRelation {
@@ -75,7 +76,7 @@ impl Relation for FileRelation {
                             // continue to next row
                         },
                         SchemaReadError::BadUtf8 => {
-                            println!("SchemaReadError::BadUtf8");
+                            println!("SchemaReadError::BadUtf8 {}", self.name);
                             // continue to next row
                         },
                         SchemaReadError::DecompressionError => {
@@ -134,6 +135,7 @@ impl FileRelation {
             m: mmapbuf,
             current: readvec,
             done: false,
+            name: fname.to_owned()
         };
 
         Ok(r)
