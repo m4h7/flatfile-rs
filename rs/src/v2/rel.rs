@@ -74,6 +74,10 @@ impl Relation for FileRelation {
                             println!("SchemaReadError::ChecksumError");
                             // continue to next row
                         },
+                        SchemaReadError::BadUtf8 => {
+                            println!("SchemaReadError::BadUtf8");
+                            // continue to next row
+                        },
                         SchemaReadError::DecompressionError => {
                             println!("SchemaReadError::DecompressionError");
                             // continue to next row
@@ -282,7 +286,7 @@ impl ConcatRelation {
                     return false;
                 }
                 if self.relations[0].nullable(i) != rel.nullable(i) {
-                    println!("union: name {} is different: '{}' vs '{}'",
+                    println!("union: nullability {} is different: '{}' vs '{}'",
                              i,
                              self.relations[0].nullable(i),
                              rel.nullable(i));
@@ -584,7 +588,7 @@ fn resolve_relation(name: &str, r: &Rels, variables: &HashMap<String, String>) -
                                 let name = e.file_name();
                                 match name.into_string() {
                                     Ok(s) => {
-//                                        println!("union: found file {} match: {}", s, re.is_match(&s));
+                                        println!("union: found file {} match: {}", s, re.is_match(&s));
                                         if re.is_match(&s) {
                                             let fr = FileRelation::new(e.path().to_str().unwrap()).unwrap();
                                             let r: Box<Relation> = Box::new(fr);

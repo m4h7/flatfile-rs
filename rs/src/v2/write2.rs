@@ -75,8 +75,10 @@ fn read_varstring<B: ReadBuf>(b: &mut B) -> Result<String, SchemaReadError> {
         let r = d.read_to_end(&mut dbuf);
         match r {
             Ok(_rdsize) => {
-                let s = str::from_utf8(&dbuf).unwrap();
-                Ok(s.to_string())
+                match str::from_utf8(&dbuf) {
+                    Ok(s) => Ok(s.to_string()),
+                    Err(e) => Err(SchemaReadError::BadUtf8)
+                }
             }
             Err(e) => {
                 println!("read_varstring: Z/decompression error: {:?}", e);

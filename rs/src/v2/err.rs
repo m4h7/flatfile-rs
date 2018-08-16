@@ -7,6 +7,7 @@ pub enum SchemaReadError {
     UnexpectedEof,
     DecompressionError,
     ChecksumError,
+    BadUtf8
 }
 
 impl Error for SchemaReadError {
@@ -16,6 +17,7 @@ impl Error for SchemaReadError {
             SchemaReadError::Eof => "EOF",
             SchemaReadError::UnexpectedEof => "Unexpected end of file",
             SchemaReadError::ChecksumError => "Checksum error",
+            SchemaReadError::BadUtf8 => "Bad UTF-8 encoding",
         }
     }
 }
