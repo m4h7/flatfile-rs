@@ -13,6 +13,12 @@ class Reader:
         self._open()
 
     def _open(self):
+        if self.filename.find(":") != -1:
+            relf, fname = self.filename.split(':')
+            self.filename = fname
+            with open(relf, "r", encoding="utf-8") as rf:
+                self.reldef = rf.read()
+
         if self.reldef is not None:
             h = _flatfile.readf_open_relation(self.filename, self.reldef)
         else:
