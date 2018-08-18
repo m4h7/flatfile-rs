@@ -202,12 +202,12 @@ pub struct Projection {
 
 impl<'a> Projection {
     pub fn new(rel: Box<Relation>, cols: Vec<String>) -> Projection {
-        let mut colindexes = Vec::new();
+        let mut colmap = Vec::new();
 
         // make colindexes [-1, -1, -1, ...] same size as cols
         let minusone = -1;
         for j in 0..cols.len() {
-            colindexes.push(minusone as usize);
+            colmap.push(minusone as usize);
         }
 
         for j in 0..cols.len() {
@@ -215,14 +215,15 @@ impl<'a> Projection {
 
             for i in 0..rel.length() {
                 if rel.name(i) == *colname {
-                    colindexes[j] = i;
+                    colmap[j] = i;
+                    println!("projection mapping column {} to {} ({})", j, i, colname);
                 }
             }
         }
 
         Projection {
             relation: rel,
-            colmap: colindexes,
+            colmap: colmap,
             colcount: cols.len(),
         }
     }
@@ -230,7 +231,7 @@ impl<'a> Projection {
 
 impl Relation for Projection {
     fn length(&self) -> usize {
-        self.relation.length()
+        self.colmap.len()
     }
     fn read(&mut self) -> bool {
         self.relation.read()
@@ -391,6 +392,7 @@ impl Rels {
 enum RelationParam {
     File { filename: String },
     Union { relations: Vec<String> },
+    Projection { base: String, columns: Vec<String> },
 }
 
 struct Tokenizer<'a> {
@@ -515,6 +517,31 @@ fn parse_relalgs(s: &[u8]) -> Option<Rels> { // Result
                 let fr = RelationParam::File { filename: filename.unwrap() }; // FileRelation::new(filename.as_str()).unwrap();
                 r.add(name, fr);
             },
+            "project" => {
+                let mut base = None;
+                let mut columns = Vec::<String>::new();
+                loop {
+                    t.skip_whitespace(SPACE, TAB, TAB, TAB);
+                    let relname = t.parse_token();
+                    if let Some(name) = relname {
+                        if base.is_none() {
+                            // first token is base relation
+                            base = Some(name);
+                        } else {
+                            columns.push(name);
+                        }
+                    } else { // end of string
+                        break;
+                    }
+                    t.skip_whitespace(SPACE, TAB, TAB, TAB);
+                    // stop parsing projection on newline
+                    if t.skip_whitespace(CR, LF, LF, LF) {
+                        break;
+                    }
+                }
+                let p = RelationParam::Projection{ base: base.unwrap(), columns: columns };
+                r.add(name, p);
+            },
             "union" => {
                 let mut relations = Vec::<String>::new(); // ConcatRelation::new();
                 loop {
@@ -562,6 +589,13 @@ fn resolve_relation(name: &str, r: &Rels, variables: &HashMap<String, String>) -
                 let result = Some(r);
                 result
             },
+            RelationParam::Projection { base, columns } => {
+                let r_base = resolve_relation(base, &r, &variables).unwrap();
+                let p = Projection::new(r_base, columns.to_owned());
+                let r : Box<Relation> = Box::new(p);
+                let result = Some(r);
+                result
+            },
             RelationParam::Union { relations } => {
                 let mut co = ConcatRelation::new();
                 for relation in relations {
@@ -590,7 +624,7 @@ fn resolve_relation(name: &str, r: &Rels, variables: &HashMap<String, String>) -
                                 let name = e.file_name();
                                 match name.into_string() {
                                     Ok(s) => {
-                                        println!("union: found file {} match: {}", s, re.is_match(&s));
+//                                        println!("union: found file {} match: {}", s, re.is_match(&s));
                                         if re.is_match(&s) {
                                             let fr = FileRelation::new(e.path().to_str().unwrap()).unwrap();
                                             let r: Box<Relation> = Box::new(fr);
