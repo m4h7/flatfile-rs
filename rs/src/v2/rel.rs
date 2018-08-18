@@ -644,13 +644,15 @@ fn resolve_relation(name: &str, r: &Rels, variables: &HashMap<String, String>) -
                             }
                         }
                     } else { // name of some other rel
-                        panic!("TODO: >>{}<<", relation);
+                        let rel = resolve_relation(relation, &r, &variables);
+                        let urel = rel.unwrap();
+                        co.add(urel);
                     }
                 }
                 if co.size() > 0 {
                     Some(Box::new(co))
                 } else {
-                    println!("resolve_relation: co empty");
+                    println!("resolve_relation: union rel has no members");
                     None
                 }
             },
