@@ -658,7 +658,7 @@ fn resolve_relation(name: &str, r: &Rels, variables: &HashMap<String, String>) -
             },
         }
     } else {
-        println!("resolve_relation: name not found");
+        println!("resolve_relation: name not found: {}", name);
         None
     }
 }
