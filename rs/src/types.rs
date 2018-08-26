@@ -51,4 +51,5 @@ pub trait Relation {
     fn ctype(&self, n: usize) -> ColumnType;
     fn nullable(&self, n: usize) -> bool;
     fn value(&self, n: usize) -> &ColumnValue;
+    fn dump_debug_info(&self);
 }

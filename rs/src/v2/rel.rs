@@ -2,10 +2,10 @@ use types::{ColumnValue, ColumnType, Relation};
 use v2::schema2::{Schema, Schema2};
 use v2::mmapbuf::MmapBuf;
 use v2::write2::{read_schema_v2, schema_read_row};
-use v2::ast::{Expr, eval, Value};
+use v2::ast::{Expr, eval, Value, parse_expr};
 use v2::err::{SchemaReadError};
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::{File, read_dir};
 use std::io::{Error, ErrorKind, Result};
 //use std::rc::Rc;
@@ -15,6 +15,8 @@ use std::borrow::BorrowMut;
 
 extern crate regex;
 use self::regex::Regex;
+extern crate tiny_keccak;
+use self::tiny_keccak::Keccak;
 
 pub struct EmptyRelation {
 }
@@ -37,6 +39,9 @@ impl Relation for EmptyRelation {
     }
     fn value(&self, _n: usize) -> &ColumnValue {
         &ColumnValue::Null
+    }
+    fn dump_debug_info(&self) {
+        println!("==== EmptyRelation");
     }
 }
 
@@ -80,7 +85,7 @@ impl Relation for FileRelation {
                             // continue to next row
                         },
                         SchemaReadError::DecompressionError => {
-                            println!("SchemaReadError::DecompressionError");
+                            println!("SchemaReadError::DecompressionError {}", self.name);
                             // continue to next row
                         },
                     }
@@ -100,6 +105,14 @@ impl Relation for FileRelation {
     fn value(&self, n: usize) -> &ColumnValue {
         assert!(self.done == false);
         self.current[n].borrow()
+    }
+    fn dump_debug_info(&self) {
+        println!("==== FileRelation");
+        println!("  .schema");
+        println!("  .mmapbuf");
+        println!("  .current (len={})", self.current.len());
+        println!("  .done={}", self.done);
+        println!("  .name={}", self.name);
     }
 }
 
@@ -187,11 +200,166 @@ impl Relation for Restriction {
     fn value(&self, n: usize) -> &ColumnValue {
         self.rel.value(n)
     }
+    fn dump_debug_info(&self) {
+        println!("==== Restriction");
+    }
 }
 
 pub struct ConcatRelation {
     relations: Vec<Box<Relation >>,
     current: usize,
+}
+
+pub struct UniqueRelation {
+    relation: Box<Relation>,
+    columns: Vec<usize>, // indices of columns to be made unique
+    hsize: usize,
+    hashset: Vec<u128>,
+}
+
+impl UniqueRelation {
+    pub fn new(rel: Box<Relation>, cols: Vec<String>) -> UniqueRelation {
+        let mut columns = Vec::new();
+
+        // make colindexes [-1, -1, -1, ...] same size as cols
+        let minusone = -1;
+        for j in 0..cols.len() {
+            columns.push(minusone as usize);
+        }
+
+        for j in 0..cols.len() {
+            let colname = &cols[j];
+
+            for i in 0..rel.length() {
+                if rel.name(i) == *colname {
+                    columns[j] = i;
+                    println!("projection mapping column {} to {} ({})", j, i, colname);
+                }
+            }
+        }
+
+        let hsize = 1213757;
+        let mut hashset = Vec::new();
+        for _ in 0..hsize {
+            hashset.push(0u128);
+        }
+
+        UniqueRelation {
+            columns: columns,
+            relation: rel,
+            hashset: hashset,
+            hsize: hsize,
+        }
+    }
+
+    fn seen(&mut self) -> bool {
+        let mut k = Keccak::new_shake128();
+        let nil = vec![0u8];
+        for j in &self.columns {
+            match self.relation.value(*j) {
+                ColumnValue::U32 { v } => {
+                    let b: [u8; 4] = [
+                        ((v & 0xff) as u8),
+                        ((v >> 8) as u8) & 0xff,
+                        ((v >> 16) as u8) & 0xff,
+                        ((v >> 24) as u8) & 0xff
+                    ];
+                    k.update(&b);
+                },
+                ColumnValue::U64 { v } => {
+                    let b: [u8; 8] = [
+                        ((v & 0xff) as u8),
+                        ((v >> 8) as u8) & 0xff,
+                        ((v >> 16) as u8) & 0xff,
+                        ((v >> 24) as u8) & 0xff,
+                        ((v >> 32) as u8) & 0xff,
+                        ((v >> 40) as u8) & 0xff,
+                        ((v >> 48) as u8) & 0xff,
+                        ((v >> 56) as u8) & 0xff
+                    ];
+                    k.update(&b);
+                },
+                ColumnValue::String { v } => {
+                    k.update(v.as_bytes());
+                },
+                ColumnValue::Null => {
+                    k.update(&nil);
+                }
+            }
+            // column delimiter
+            k.update(&nil);
+        }
+        let mut res: [u8; 16] = [0; 16];
+        k.finalize(&mut res);
+        let hash: u128 =
+            (res[0] as u128) +
+            ((res[1] as u128) << 1*8) +
+            ((res[2] as u128) << 2*8) +
+            ((res[3] as u128) << 3*8) +
+            ((res[4] as u128) << 4*8) +
+            ((res[5] as u128) << 5*8) +
+            ((res[6] as u128) << 6*8) +
+            ((res[7] as u128) << 7*8) +
+            ((res[8] as u128) << 8*8) +
+            ((res[9] as u128) << 9*8) +
+            ((res[10] as u128) << 10*8) +
+            ((res[11] as u128) << 11*8) +
+            ((res[12] as u128) << 12*8) +
+            ((res[13] as u128) << 13*8) +
+            ((res[14] as u128) << 14*8) +
+            ((res[15] as u128) << 15*8);
+
+        let mut pos = (hash % (self.hsize as u128)) as usize;
+        while self.hashset[pos] != 0 {
+            if self.hashset[pos] == hash {
+                return true;
+            }
+            pos += 1;
+            if pos > self.hsize {
+                pos = 0;
+            }
+        }
+        // update
+        assert!(self.hashset[pos] == 0);
+        self.hashset[pos] = hash;
+        return false;
+    }
+}
+
+impl Relation for UniqueRelation {
+    fn length(&self) -> usize {
+        self.relation.length()
+    }
+    fn read(&mut self) -> bool {
+        loop {
+            let r = self.relation.read();
+            if (r) {
+                if (!self.seen()) {
+                    return true;
+                }
+            } else {
+                return false;
+            }
+        }
+    }
+    fn name(&self, n: usize) -> String {
+        self.relation.name(n)
+    }
+    fn ctype(&self, n: usize) -> ColumnType {
+        self.relation.ctype(n)
+    }
+    fn nullable(&self, n: usize) -> bool {
+        self.relation.nullable(n)
+    }
+    fn value(&self, n: usize) -> &ColumnValue {
+        self.relation.value(n)
+    }
+    fn dump_debug_info(&self) {
+        println!("==== Unique");
+        println!("  .columns={:?}", self.columns);
+        println!("  .hsize={:?}", self.hsize);
+        self.relation.dump_debug_info();
+    }
 }
 
 pub struct Projection {
@@ -252,6 +420,9 @@ impl Relation for Projection {
         let m = self.colmap[n];
         self.relation.value(m)
     }
+    fn dump_debug_info(&self) {
+        println!("==== Projection");
+    }
 }
 
 impl ConcatRelation {
@@ -293,7 +464,7 @@ impl ConcatRelation {
                              i,
                              self.relations[0].nullable(i),
                              rel.nullable(i));
-                    return false;
+//                    return false;
                 }
             }
         }
@@ -341,6 +512,9 @@ impl Relation for ConcatRelation {
         let cv = self.relations[self.current].value(n);
         cv
     }
+    fn dump_debug_info(&self) {
+        println!("==== Union");
+    }
 }
 
 struct ParseError {
@@ -357,8 +531,8 @@ const RE: u8 = '/' as u8;
 
 // parser
 // -------------------------------------
-// a = file "name"
-// b = project a cid bid xid
+// a = file "name"                                              [ OK ]
+// b = project a cid bid xid                                    [ OK ]
 // c = rename b cid -> id bix -> ix
 // d = restrict c (id > 3 && id < 6)
 // e = dedup d [col1] [col2] (cond1) (cond2) (cond3)
@@ -368,7 +542,7 @@ const RE: u8 = '/' as u8;
 // j = inner_join h.id j.id # intersection
 // k = left_join h.id j.id # j will have schema with nulls
 // l = full_outer_join
-// x = union "*.glob" "*.glob2" otherrel file_{variable}.ext
+// x = union "*.glob" "*.glob2" otherrel file_{variable}.ext    [ OK ]
 //
 
 
@@ -393,6 +567,8 @@ enum RelationParam {
     File { filename: String },
     Union { relations: Vec<String> },
     Projection { base: String, columns: Vec<String> },
+    Unique { base: String, columns: Vec<String> },
+    Restriction { base: String, expr: Box<Expr> },
 }
 
 struct Tokenizer<'a> {
@@ -542,6 +718,43 @@ fn parse_relalgs(s: &[u8]) -> Option<Rels> { // Result
                 let p = RelationParam::Projection{ base: base.unwrap(), columns: columns };
                 r.add(name, p);
             },
+            "restrict" => {
+                t.skip_whitespace(SPACE, TAB, TAB, TAB);
+                let base = t.parse_token().unwrap();
+                t.skip_whitespace(SPACE, TAB, TAB, TAB);
+                let expr = t.parse_token().unwrap();
+                println!("restriction: '{}' '{}'", base, expr);
+                let crlf = t.skip_whitespace(CR, LF, LF, LF);
+                assert!(crlf);
+                let e = parse_expr(expr.as_bytes());
+                let p = RelationParam::Restriction { base: base, expr: e };
+                r.add(name, p);
+            }
+            "unique" => {
+                let mut base = None;
+                let mut columns = Vec::<String>::new();
+                loop {
+                    t.skip_whitespace(SPACE, TAB, TAB, TAB);
+                    let relname = t.parse_token();
+                    if let Some(name) = relname {
+                        if base.is_none() {
+                            // first token is base relation
+                            base = Some(name);
+                        } else {
+                            columns.push(name);
+                        }
+                    } else { // end of string
+                        break;
+                    }
+                    t.skip_whitespace(SPACE, TAB, TAB, TAB);
+                    // stop parsing projection on newline
+                    if t.skip_whitespace(CR, LF, LF, LF) {
+                        break;
+                    }
+                }
+                let p = RelationParam::Unique{ base: base.unwrap(), columns: columns };
+                r.add(name, p);
+            },
             "union" => {
                 let mut relations = Vec::<String>::new(); // ConcatRelation::new();
                 loop {
@@ -574,6 +787,10 @@ fn parse_relalgs(s: &[u8]) -> Option<Rels> { // Result
 fn resolve_relation(name: &str, r: &Rels, variables: &HashMap<String, String>) -> Option<Box<Relation>> {
     if let Some(top) = r.get(name) {
         match top {
+            RelationParam::Restriction { base, expr } => {
+                // TODO
+                None
+            },
             RelationParam::File { filename } => {
                 let v: Vec<char> = filename.chars().collect();
                 let first = v[0];
@@ -586,6 +803,14 @@ fn resolve_relation(name: &str, r: &Rels, variables: &HashMap<String, String>) -
                     FileRelation::new(&filename).unwrap()
                 };
                 let r : Box<Relation> = Box::new(fr);
+                let result = Some(r);
+                result
+            },
+            RelationParam::Unique { base, columns } => {
+                let r_base = resolve_relation(base, &r, &variables).unwrap();
+                println!("creating unique, columns={:?}", columns);
+                let p = UniqueRelation::new(r_base, columns.to_owned());
+                let r : Box<Relation> = Box::new(p);
                 let result = Some(r);
                 result
             },

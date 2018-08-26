@@ -1,11 +1,13 @@
 use types::{ColumnValue, Relation};
 use std::collections::VecDeque;
 
+#[derive(Debug)]
 pub enum Value {
     Ref { col: usize },
     Val { val: ColumnValue },
 }
 
+#[derive(Debug)]
 pub enum Expr {
     Equal {
       l: Value,
@@ -61,7 +63,7 @@ fn parse_token(s: &[u8], start: usize) -> (Token, usize) {
     }
 }
 
-fn parse(s: &[u8]) -> Box<Expr> {
+pub fn parse_expr(s: &[u8]) -> Box<Expr> {
     let mut operators: VecDeque<Token> = VecDeque::new();
     let mut output: VecDeque<Token> = VecDeque::new();
 
