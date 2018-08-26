@@ -334,7 +334,7 @@ impl Relation for UniqueRelation {
         loop {
             let r = self.relation.read();
             if (r) {
-                if (!self.seen()) {
+                if !self.seen() {
                     return true;
                 }
             } else {
@@ -870,16 +870,18 @@ fn resolve_relation(name: &str, r: &Rels, variables: &HashMap<String, String>) -
                         }
                     } else { // name of some other rel
                         let rel = resolve_relation(relation, &r, &variables);
-                        let urel = rel.unwrap();
-                        co.add(urel);
+                        match rel {
+                            Some(urel) => { co.add(urel); },
+                            None => {
+                                println!("WARNING: failed to resolve relation {}", relation);
+                            }
+                        }
                     }
                 }
-                if co.size() > 0 {
-                    Some(Box::new(co))
-                } else {
-                    println!("resolve_relation: union rel has no members");
-                    None
+                if co.size() == 0 {
+                    println!("WARNING: resolve_relation: union rel has no members");
                 }
+                Some(Box::new(co))
             },
         }
     } else {
