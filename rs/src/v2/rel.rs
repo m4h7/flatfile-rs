@@ -476,7 +476,8 @@ impl ConcatRelation {
 impl Relation for ConcatRelation {
     fn length(&self) -> usize {
         if self.relations.len() == 0 {
-            panic!("ConcatRelation::length => no relations!");
+            println!("WARNING: Unique length => no relations!");
+            return 0;
         }
         self.relations[0].length()
     }
@@ -844,34 +845,54 @@ fn resolve_relation(name: &str, r: &Rels, variables: &HashMap<String, String>) -
 
                         let re = Regex::new(regexp).unwrap();
 
-                        for entry in read_dir(dir).unwrap() {
-                            if let Ok(e) = entry {
-                                let name = e.file_name();
-                                match name.into_string() {
-                                    Ok(s) => {
-//                                        println!("union: found file {} match: {}", s, re.is_match(&s));
-                                        if re.is_match(&s) {
-                                            let fr = FileRelation::new(e.path().to_str().unwrap()).unwrap();
-                                            let r: Box<Relation> = Box::new(fr);
-                                            let added = co.add(r);
-                                            if !added {
-                                                println!("unable to add relation because of schema mismatch");
-                                                return None;
-                                            }
-                                        }
-                                    },
-                                    Err(os) => {
-                                        println!("read_dir string not valid unicode {:?}", os);
-                                    },
-                                };
-                            } else {
-                                println!("read_dir fail {:?}", entry);
+                        match read_dir(dir) {
+                            Ok(rdir) => {
+                                for entry in rdir {
+                                    if let Ok(e) = entry {
+                                        let name = e.file_name();
+                                        match name.into_string() {
+                                            Ok(s) => {
+//                                                println!("union: found file {} match: {}", s, re.is_match(&s));
+                                                if re.is_match(&s) {
+                                                    let p = e.path().to_str().unwrap().to_owned();
+                                                    match FileRelation::new(&p) {
+                                                        Ok(fr) => {
+                                                            let r: Box<Relation> = Box::new(fr);
+                                                            let added = co.add(r);
+                                                            if !added {
+                                                                println!("unable to add relation because of schema mismatch");
+                                                                return None;
+                                                            }
+                                                        }
+                                                        Err(e) => {
+                                                            println!("unable to open file relation {:?}: {:?}", p, e);
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            Err(os) => {
+                                                println!("read_dir string not valid unicode {:?}", os);
+                                            },
+                                        };
+                                    } else {
+                                        println!("read_dir fail {:?}", entry);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                println!("union: read_dir open fail {:?}", e);
                             }
                         }
                     } else { // name of some other rel
                         let rel = resolve_relation(relation, &r, &variables);
                         match rel {
-                            Some(urel) => { co.add(urel); },
+                            Some(urel) => {
+                                if urel.length() != 0 {
+                                    co.add(urel);
+                                } else {
+                                    println!("WARNING: relation {} has an empty schema, skipped", relation);
+                                }
+                            },
                             None => {
                                 println!("WARNING: failed to resolve relation {}", relation);
                             }
