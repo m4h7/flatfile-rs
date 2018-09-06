@@ -50,9 +50,14 @@ class Reader:
                 elif schema[j][1] != self.schema[j][1]:
                     self.schema_error(self.schema, schema, "type")
                 elif schema[j][2] != self.schema[j][2]:
-                    self.schema_error(self.schema, schema, "nullable")
+                    self.schema_error(self.schema, schema, "nullable differs")
         else:
             self.schema = schema
+
+        # set self.columns
+        self.columns = []
+        for name, _, _ in self.schema:
+            self.columns.append(name)
 
     def _close(self):
         if self.h is not None:
@@ -84,6 +89,9 @@ class Reader:
             raise Exception("columns argument must be an iterable")
         if isinstance(columns, str):
             raise Exception("columns argument is a string, expected iterable")
+        if not _flatfile.readf_row_start(self.h):
+            # check readf_row_start first to handle empty schemas (empty unions)
+            return None
         for col in columns:
             found = False
             for name, _, _ in self.schema:
@@ -94,8 +102,6 @@ class Reader:
                     "column {} is not in schema: {}".format(
                         col, self.schema
                         ))
-        if not _flatfile.readf_row_start(self.h):
-            return None
         val = []
         for index, item in enumerate(self.schema):
             name, _type, nullable = item
