@@ -205,11 +205,6 @@ impl Relation for Restriction {
     }
 }
 
-pub struct ConcatRelation {
-    relations: Vec<Box<Relation >>,
-    current: usize,
-}
-
 pub struct UniqueRelation {
     relation: Box<Relation>,
     columns: Vec<usize>, // indices of columns to be made unique
@@ -425,50 +420,95 @@ impl Relation for Projection {
     }
 }
 
+pub struct ConcatRelation {
+    relations: Vec<Box<Relation >>,
+    current: usize,
+    schema: Schema2,
+    mapping: Vec<isize>,
+}
+
 impl ConcatRelation {
     pub fn new() -> ConcatRelation {
         ConcatRelation {
             relations: Vec::new(),
+            // index into relations
             current: 0,
+            // union of all columns
+            schema: Schema2::new(),
+            mapping: Vec::new(),
         }
     }
     pub fn size(&self) -> usize {
         self.relations.len()
     }
+    pub fn reindex(&mut self) {
+        self.mapping.clear();
+        // find the indices for columns in schema in current rel
+        for j in 0..self.schema.len() {
+            let mut found: isize = -1;
+            for i in 0..self.relations[self.current].length() {
+                if self.relations[self.current].name(i) == self.schema.name(j) {
+                    found = i as isize;
+                }
+            }
+            self.mapping.push(found);
+        }
+        assert!(self.mapping.len() == self.schema.len());
+    }
     pub fn add(&mut self, rel: Box<Relation>) -> bool {
         // first check that the schema is the same
         if self.relations.len() > 0 {
-            if self.relations[0].length() != rel.length() {
-                println!("union: schema lengths are different {} vs {}",
-                         self.relations[0].length(),
-                         rel.length());
-                return false;
-            }
             for i in 0..rel.length() {
-                if self.relations[0].name(i) != rel.name(i) {
-                    println!("union: name {} is different: '{}' vs '{}'",
-                             i,
-                             self.relations[0].name(i),
-                             rel.name(i));
-                    return false;
+                let mut found = None;
+
+                for j in 0..self.schema.len() {
+                    if self.schema.name(j) == rel.name(i) {
+                        found = Some(j);
+                    }
                 }
-                if self.relations[0].ctype(i) != rel.ctype(i) {
-                    println!("union: type {} is different: '{:?}' vs '{:?}'",
-                             i,
-                             self.relations[0].ctype(i),
-                             rel.ctype(i));
-                    return false;
+
+                if let Some(index) = found {
+                    if self.schema.ctype(i) != rel.ctype(i) {
+                        println!("union: types of {} are different: {:?} and {:?}",
+                                 rel.name(i), rel.ctype(i), self.schema.ctype(index));
+                        return false;
+                    }
+
+                    if self.schema.nullable(i) != rel.nullable(i) {
+                        println!("union: nullability {} is different: '{}' vs '{}'",
+                                 i,
+                                 self.schema.nullable(i),
+                                 rel.nullable(i));
+                        if !self.schema.nullable(index) && rel.nullable(i) {
+                            println!("union: switching column {} to nullable",
+                                     rel.name(i));
+                            self.schema.set_nullable(index, true);
+                        }
+                    }
+                } else {
+                    if (rel.nullable(i)) {
+                        println!("union: new column {} - is nullable",
+                                 rel.name(i));
+                        self.schema.add(&rel.name(i), rel.ctype(i), rel.nullable(i));
+                    } else {
+                        println!("union: ERROR: new column {} - NOT NULLABLE",
+                                 rel.name(i));
+                        return false;
+                    }
                 }
-                if self.relations[0].nullable(i) != rel.nullable(i) {
-                    println!("union: nullability {} is different: '{}' vs '{}'",
-                             i,
-                             self.relations[0].nullable(i),
-                             rel.nullable(i));
-//                    return false;
-                }
+            }
+        } else {
+            // copy the schema
+            for i in 0..rel.length() {
+                self.schema.add(
+                    &rel.name(i),
+                    rel.ctype(i),
+                    rel.nullable(i)
+                );
             }
         }
         self.relations.push(rel);
+        self.reindex();
         true
     }
 }
@@ -476,10 +516,9 @@ impl ConcatRelation {
 impl Relation for ConcatRelation {
     fn length(&self) -> usize {
         if self.relations.len() == 0 {
-            println!("WARNING: Unique length => no relations!");
-            return 0;
+            println!("ERROR: Union schema length is 0 => no relations present!");
         }
-        self.relations[0].length()
+        self.schema.len()
     }
     fn read(&mut self) -> bool {
         loop {
@@ -487,6 +526,11 @@ impl Relation for ConcatRelation {
                 let ok = self.relations[self.current].read();
                 if !ok {
                     self.current += 1;
+                    if self.current < self.relations.len() {
+                        self.reindex();
+                    } else {
+                        self.mapping.clear();
+                    }
                 } else {
                     return ok;
                 }
@@ -498,20 +542,25 @@ impl Relation for ConcatRelation {
     }
     fn name(&self, n: usize) -> String {
         assert!(self.current < self.relations.len());
-        self.relations[self.current].name(n)
+        self.schema.name(n).to_owned()
     }
     fn ctype(&self, n: usize) -> ColumnType {
         assert!(self.current < self.relations.len());
-        self.relations[self.current].ctype(n)
+        self.schema.ctype(n)
     }
     fn nullable(&self, n: usize) -> bool {
         assert!(self.current < self.relations.len());
-        self.relations[self.current].nullable(n)
+        self.schema.nullable(n)
     }
     fn value(&self, n: usize) -> &ColumnValue {
         assert!(self.current < self.relations.len());
-        let cv = self.relations[self.current].value(n);
-        cv
+        let m = self.mapping[n];
+        if (m != -1) {
+            let cv = self.relations[self.current].value(m as usize);
+            cv
+        } else {
+            &ColumnValue::Null
+        }
     }
     fn dump_debug_info(&self) {
         println!("==== Union");

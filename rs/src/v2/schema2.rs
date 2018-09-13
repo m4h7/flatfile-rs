@@ -31,6 +31,10 @@ impl Schema2 {
         self.types.push(ctype);
         self.nullable.push(nullable);
     }
+
+    pub fn set_nullable(&mut self, index: usize, nullability: bool) {
+        self.nullable[index] = nullability;
+    }
 }
 
 impl Schema for Schema2 {
