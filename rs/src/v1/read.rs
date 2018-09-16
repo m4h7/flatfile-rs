@@ -13,7 +13,7 @@ pub fn schema_read<'a, R: Read>(
     columns: &'a [Column],
     reader: &mut R,
     header_bytes: usize,
-    checksum: &ChecksumType) -> Row<'a> {
+    checksum: &ChecksumType) -> Option<Row<'a>> {
 
     let mut adler = RollingAdler32::from_value(0);
 
@@ -146,12 +146,13 @@ pub fn schema_read<'a, R: Read>(
                        ((buf[3] as u32) << 24);
             let expected = adler.hash();
             if hash != expected {
-                panic!("incorrect checksum");
+                println!("incorrect checksum got={} exp={}", hash, expected);
+                return None;
             }
         }
         ChecksumType::None => {
         }
     }
 
-    result
+    Some(result)
 }

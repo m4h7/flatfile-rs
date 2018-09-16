@@ -30,8 +30,23 @@ rw_schema = [
     [ "e", "string", True ],
 ]
 
+rw_z_schema = [
+    [ "a", "u32", False ],
+    [ "z", "string", True ],
+    [ "b", "u32", False ],
+    [ "c", "u32", True ],
+    [ "d", "u64", True ],
+    [ "e", "string", True ],
+]
+
 row1 = [1, 2, None, 64, "hello"]
 row2 = [2, 4, 5, None, "world"]
+
+rowY1 = [9, 9, 9, 1111, "yyyyy"]
+rowY2 = [7, 7, 7, None, "YYYYY"]
+
+rowYZ1 = [9, "z1", 9, 9, 1111, "yyyyy"]
+rowYZ2 = [7, "z2", 7, 7, None, "YYYYY"]
 
 def test_writer():
     with Writer("/tmp/_test2.dat", rw_schema) as w:
@@ -146,12 +161,44 @@ def test_relation_file_union():
         w.write_row(row2)
 
     with Writer("/tmp/_testY.dat", rw_schema) as w:
-        w.write_row(row2)
-        w.write_row(row1)
+        w.write_row(rowY2)
+        w.write_row(rowY1)
+
+    with Writer("/tmp/_testZ.dat", rw_z_schema) as w:
+        w.write_row(rowYZ2)
+        w.write_row(rowYZ1)
 
     with Reader("abc", reldef="abc = union '/tmp/_test[XY].dat'") as r:
+        print ("XY cols", r.columns)
+        for d, e, c, b, a in r.fetch_columns(['d', 'e', 'c', 'b', 'a']):
+            print("XY union row =>", d, e, c, b, a)
+
+    with Reader("abc", reldef="abc = union '/tmp/_test[XY].dat'") as r:
+        print ("XY cols", r.columns)
+        for a, b, c, d, e in r.fetch_columns(['a', 'b', 'c', 'd', 'e']):
+            print("XY union row =>", a, b, c, d, e)
+
+    with Reader("abc", reldef="abc = union '/tmp/_test[XY].dat' '/tmp/_testZ.dat'") as r:
+        print ("XYZ cols", r.columns)
+        for a, b, c, d, e, z in r.fetch_columns(['d', 'e', 'c', 'b', 'a', 'z']):
+            print("XYZ union row =>", a, b, c, d, e, z)
+
+    reldefp = """pre = union '/tmp/_testY.dat'
+abc = union '/tmp/_testX.dat' '/tmp/_testX.dat' pre pre
+p = project abc e
+"""
+    with Reader("p", reldef=reldefp) as r:
         for i, row in enumerate(r.fetch()):
-            print("union row =>", row)
+            print("projection =>", i, row)
+
+    reldefp = """pre = union '/tmp/_testY.dat'
+abc = union '/tmp/_testY.dat' '/tmp/_testY.dat' pre pre pre pre
+p = project abc a b c e
+u = unique p a b c e
+"""
+    with Reader("u", reldef=reldefp) as r:
+        for i, row in enumerate(r.fetch()):
+            print("unique =>", i, row)
 
 test_schema()
 

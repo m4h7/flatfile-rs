@@ -56,8 +56,17 @@ class Reader:
 
         # set self.columns
         self.columns = []
-        for name, _, _ in self.schema:
+        self.nullable = set()
+        self.lookup = {}
+        self.types = {}
+        i = 0
+        for name, type_, nullable in self.schema:
             self.columns.append(name)
+            self.lookup[name] = i
+            self.types[name] = type_
+            if nullable:
+                self.nullable.add(name)
+            i += 1
 
     def _close(self):
         if self.h is not None:
@@ -103,26 +112,26 @@ class Reader:
                         col, self.schema
                         ))
         val = []
-        for index, item in enumerate(self.schema):
-            name, _type, nullable = item
-            if name in columns:
-                if nullable and _flatfile.readf_row_is_null(self.h, index):
-                    v = None
-                elif _type == "u32":
-                    v = _flatfile.readf_row_get_u32(self.h, index)
-                elif _type == "u64":
-                    v = _flatfile.readf_row_get_u64(self.h, index)
-                elif _type == "string":
-                    v = _flatfile.readf_row_get_string(self.h, index)
-                else:
-                    raise Exception(
-                        "unknown type in schema: #{}. {} {} {}",
-                        index,
-                        name,
-                        _type,
-                        nullable,
-                    )
-                val.append(v)
+        for name in columns:
+            index = self.lookup[name]
+            _type = self.types[name]
+            if name in self.nullable and _flatfile.readf_row_is_null(self.h, index):
+                v = None
+            elif _type == "u32":
+                v = _flatfile.readf_row_get_u32(self.h, index)
+            elif _type == "u64":
+                v = _flatfile.readf_row_get_u64(self.h, index)
+            elif _type == "string":
+                v = _flatfile.readf_row_get_string(self.h, index)
+            else:
+                raise Exception(
+                    "unknown type in schema: #{}. {} {} {}",
+                    index,
+                    name,
+                    _type,
+                    self.nullable.has(name),
+                )
+            val.append(v)
         _flatfile.readf_row_end(self.h)
         return val
 
@@ -220,6 +229,8 @@ class Appender:
         self.schema = schema
         self.h = None
         self._open()
+        self.written = 0
+        self.opened = False
 
     def _open(self):
         if os.path.exists(self.filename) and os.path.getsize(self.filename) > 0:
@@ -227,6 +238,7 @@ class Appender:
             if h == -1:
                 raise OpenError("Unable to open {} for writing".format(self.filename))
             self.h = h
+            self.opened = True
 
             self.sch = _flatfile.writef_get_schema(self.h)
 
@@ -266,6 +278,17 @@ class Appender:
             _flatfile.writef_close(self.h)
             self.h = None
 
+    def close_nonempty(self):
+        if self.h is not None:
+            _flatfile.writef_close(self.h)
+            self.h = None
+        if self.opened and self.written == 0:
+            try:
+                os.unlink(self.filename)
+                print("EMPTY REMOVED", self.filename)
+            except FileNotFoundError as e:
+                pass
+
     def write_dict(self, d):
         for key in d:
             found = False
@@ -298,6 +321,7 @@ class Appender:
         result = _flatfile.writef_row_end(self.h)
         if not result:
             raise Exception("row write failed")
+        self.written += 1
         return result
 
     def write_row(self, values):
@@ -313,7 +337,12 @@ class Appender:
                 _flatfile.writef_row_set_string(self.h, i, values[i])
             else:
                 raise Exception("unknown type in schema {}".format(self.schema[i][1]))
-        return _flatfile.writef_row_end(self.h)
+        rc = _flatfile.writef_row_end(self.h)
+        if rc:
+            self.written += 1
+        else:
+            raise Exception("write_row failed")
+        return rc
 
     def schema_error(self, expected, got, reason):
         print("appender schema error")

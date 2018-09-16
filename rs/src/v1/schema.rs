@@ -41,11 +41,18 @@ impl Metadata {
     }
 
     pub fn read<R: Read>(&self, reader: &mut R) -> Row {
-        schema_read(
-            &self.columns,
-            reader,
-            self.header_bytes,
-            &self.checksum
-        )
+        loop {
+            let r = schema_read(
+                &self.columns,
+                reader,
+                self.header_bytes,
+                &self.checksum
+            );
+            if r.is_some() {
+                return r.unwrap();
+            }
+            println!("continuing with next row");
+        }
+
     }
 }

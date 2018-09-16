@@ -443,6 +443,7 @@ impl ConcatRelation {
     }
     pub fn reindex(&mut self) {
         self.mapping.clear();
+
         // find the indices for columns in schema in current rel
         for j in 0..self.schema.len() {
             let mut found: isize = -1;
@@ -452,6 +453,7 @@ impl ConcatRelation {
                 }
             }
             self.mapping.push(found);
+            assert!(self.mapping[j] == found);
         }
         assert!(self.mapping.len() == self.schema.len());
     }
@@ -468,16 +470,16 @@ impl ConcatRelation {
                 }
 
                 if let Some(index) = found {
-                    if self.schema.ctype(i) != rel.ctype(i) {
+                    if self.schema.ctype(index) != rel.ctype(i) {
                         println!("union: types of {} are different: {:?} and {:?}",
                                  rel.name(i), rel.ctype(i), self.schema.ctype(index));
                         return false;
                     }
 
-                    if self.schema.nullable(i) != rel.nullable(i) {
-                        println!("union: nullability {} is different: '{}' vs '{}'",
-                                 i,
-                                 self.schema.nullable(i),
+                    if self.schema.nullable(index) != rel.nullable(i) {
+                        println!("union: nullability of '{}' is different: '{}' vs '{}'",
+                                 self.schema.name(index),
+                                 self.schema.nullable(index),
                                  rel.nullable(i));
                         if !self.schema.nullable(index) && rel.nullable(i) {
                             println!("union: switching column {} to nullable",
@@ -486,7 +488,7 @@ impl ConcatRelation {
                         }
                     }
                 } else {
-                    if (rel.nullable(i)) {
+                    if rel.nullable(i) {
                         println!("union: new column {} - is nullable",
                                  rel.name(i));
                         self.schema.add(&rel.name(i), rel.ctype(i), rel.nullable(i));
@@ -555,7 +557,7 @@ impl Relation for ConcatRelation {
     fn value(&self, n: usize) -> &ColumnValue {
         assert!(self.current < self.relations.len());
         let m = self.mapping[n];
-        if (m != -1) {
+        if m != -1 {
             let cv = self.relations[self.current].value(m as usize);
             cv
         } else {
