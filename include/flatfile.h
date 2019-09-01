@@ -3,6 +3,8 @@
 
 #include <stdbool.h>
 
+char const* flatfile_version(void);
+
 /**
  * schema functions
  */
