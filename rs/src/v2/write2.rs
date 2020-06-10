@@ -2,6 +2,7 @@ use types::{ColumnType, ColumnValue};
 use std::str;
 use std::io::{Read, Write};
 use std::cmp::{min};
+use std::sync::atomic::{AtomicBool, Ordering};
 use v2::schema2::{Schema, Schema2};
 use v2::buf::{ReadBuf, AppendBuf};
 use v2::adlerbuf::{ReadBufAdler32, AppendBufAdler32};
@@ -81,7 +82,11 @@ fn read_varstring<B: ReadBuf>(b: &mut B) -> Result<String, SchemaReadError> {
                 }
             }
             Err(e) => {
-                println!("read_varstring: Z/decompression error: {:?}", e);
+                static do_print : AtomicBool = AtomicBool::new(false);
+		if do_print.load(Ordering::Relaxed) {
+                    println!("read_varstring: Z/decompression error: {:?}", e);
+		    do_print.store(true, Ordering::Relaxed);
+                }
                 Err(SchemaReadError::DecompressionError)
             }
         }
@@ -103,7 +108,12 @@ fn read_varstring<B: ReadBuf>(b: &mut B) -> Result<String, SchemaReadError> {
         let s = str::from_utf8(&dbuf).unwrap();
         Ok(s.to_string())
     } else {
-        panic!("unknown compression type {}", co);
+        static do_print : AtomicBool = AtomicBool::new(false);
+        if do_print.load(Ordering::Relaxed) {
+            println!("read_varstring: unknown compression type {}", co);
+	    do_print.store(true, Ordering::Relaxed);
+        }
+        Err(SchemaReadError::DecompressionError)
     }
 }
 
