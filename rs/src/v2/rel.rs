@@ -16,7 +16,8 @@ use std::borrow::BorrowMut;
 extern crate regex;
 use self::regex::Regex;
 extern crate tiny_keccak;
-use self::tiny_keccak::Keccak;
+use self::tiny_keccak::Shake;
+use v2::rel::tiny_keccak::Hasher;
 
 pub struct EmptyRelation {
 }
@@ -248,7 +249,7 @@ impl UniqueRelation {
     }
 
     fn seen(&mut self) -> bool {
-        let mut k = Keccak::new_shake128();
+        let mut k = Shake::v128();
         let nil = vec![0u8];
         for j in &self.columns {
             match self.relation.value(*j) {

@@ -82,10 +82,10 @@ fn read_varstring<B: ReadBuf>(b: &mut B) -> Result<String, SchemaReadError> {
                 }
             }
             Err(e) => {
-                static do_print : AtomicBool = AtomicBool::new(false);
-		if do_print.load(Ordering::Relaxed) {
+                static DO_PRINT_DECOMP_ERROR : AtomicBool = AtomicBool::new(false);
+		if DO_PRINT_DECOMP_ERROR.load(Ordering::Relaxed) {
                     println!("read_varstring: Z/decompression error: {:?}", e);
-		    do_print.store(true, Ordering::Relaxed);
+		    DO_PRINT_DECOMP_ERROR.store(true, Ordering::Relaxed);
                 }
                 Err(SchemaReadError::DecompressionError)
             }
@@ -108,10 +108,10 @@ fn read_varstring<B: ReadBuf>(b: &mut B) -> Result<String, SchemaReadError> {
         let s = str::from_utf8(&dbuf).unwrap();
         Ok(s.to_string())
     } else {
-        static do_print : AtomicBool = AtomicBool::new(false);
-        if do_print.load(Ordering::Relaxed) {
+        static DO_PRINT_UNK_COMP : AtomicBool = AtomicBool::new(false);
+        if DO_PRINT_UNK_COMP.load(Ordering::Relaxed) {
             println!("read_varstring: unknown compression type {}", co);
-	    do_print.store(true, Ordering::Relaxed);
+	    DO_PRINT_UNK_COMP.store(true, Ordering::Relaxed);
         }
         Err(SchemaReadError::DecompressionError)
     }
