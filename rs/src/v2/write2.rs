@@ -106,9 +106,15 @@ fn read_varstring<B: ReadBuf>(b: &mut B) -> Result<String, SchemaReadError> {
         let mut dbuf: Vec<u8> = Vec::new();
         let r = d.read_to_end(&mut dbuf);
         d.finish();
-        r.unwrap();
-        let s = str::from_utf8(&dbuf).unwrap();
-        Ok(s.to_string())
+        match(r) {
+	    Ok(_) => {
+                match str::from_utf8(&dbuf) {
+		    Ok(s) => Ok(s.to_string()),
+		    Err(e) => Err(SchemaReadError::DecompressionError)
+		}
+	    },
+	    Err(e) => Err(SchemaReadError::DecompressionError)
+	}
     } else {
         static DO_PRINT_UNK_COMP : AtomicBool = AtomicBool::new(false);
         if DO_PRINT_UNK_COMP.load(Ordering::Relaxed) {
