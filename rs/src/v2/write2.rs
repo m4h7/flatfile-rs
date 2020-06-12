@@ -62,8 +62,10 @@ fn read_varstring<B: ReadBuf>(b: &mut B) -> Result<String, SchemaReadError> {
             bytes.push(byte);
         }
         // convert bytes to string
-        let s = str::from_utf8(bytes.as_slice()).unwrap();
-        Ok(s.to_string()) // TBD
+	match str::from_utf8(bytes.as_slice()) {
+	      Ok(x) => Ok(x.to_string()),
+	      Err(e) => Err(SchemaReadError::BadUtf8)
+        }
     } else if co == 'Z' as u8 {
         let size = read_varint(b);
         let mut bytes = Vec::new();
